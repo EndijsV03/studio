@@ -9,7 +9,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import wav from 'wav';
+import {googleAI} from '@genkit-ai/googleai';
 
 const ExtractContactInfoInputSchema = z.object({
   photoDataUri: z
@@ -36,35 +36,36 @@ export async function extractContactInfo(input: ExtractContactInfoInput): Promis
   return extractContactInfoFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'extractContactInfoPrompt',
-  input: {schema: ExtractContactInfoInputSchema},
-  output: {schema: ExtractContactInfoOutputSchema},
-  prompt: `You are an AI assistant that extracts contact information from business card images.
-
-  Given a business card image, extract the following information:
-  - Full Name
-  - Job Title
-  - Company Name
-  - Phone Number
-  - Email Address
-  - Physical Address
-
-  Here is the business card image:
-  {{media url=photoDataUri}}
-
-  Return the extracted information in JSON format.
-  `,
-});
-
 const extractContactInfoFlow = ai.defineFlow(
   {
     name: 'extractContactInfoFlow',
     inputSchema: ExtractContactInfoInputSchema,
     outputSchema: ExtractContactInfoOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input) => {
+    const visionModel = googleAI.model('gemini-1.5-flash-latest');
+    const { output } = await ai.generate({
+      model: visionModel,
+      prompt: `
+        You are an AI assistant that extracts contact information from business card images.
+
+        Given a business card image, extract the following information:
+        - Full Name
+        - Job Title
+        - Company Name
+        - Phone Number
+        - Email Address
+        - Physical Address
+
+        Here is the business card image:
+        ${JSON.stringify({ media: { url: input.photoDataUri } })}
+
+        Return the extracted information in JSON format.
+      `,
+      output: {
+        schema: ExtractContactInfoOutputSchema,
+      },
+    });
     return output!;
   }
 );
