@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -13,22 +13,68 @@ import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
 import type { Contact } from '@/types';
-import { UploadCloud, Search, Download, Loader2 } from 'lucide-react';
+import { UploadCloud, Search, Download, Loader2, Camera, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function Home() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState(true);
+
   const { toast } = useToast();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isCameraOpen) {
+      // Stop camera stream when dialog is closed
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+      return;
+    }
+
+    const getCameraPermission = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setHasCameraPermission(true);
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use this feature.',
+        });
+      }
+    };
+
+    getCameraPermission();
+
+    return () => {
+      // Cleanup: stop camera stream when component unmounts or dialog closes
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isCameraOpen, toast]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setFileToUpload(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
@@ -37,11 +83,11 @@ export default function Home() {
     }
   };
 
-  const handleExtract = async () => {
-    if (!fileToUpload || !previewUrl) return;
+  const handleExtract = async (dataUrl: string | null) => {
+    if (!dataUrl) return;
 
     setIsLoading(true);
-    const result = await extractContactInfoAction(previewUrl);
+    const result = await extractContactInfoAction(dataUrl);
     setIsLoading(false);
 
     if ('error' in result) {
@@ -53,7 +99,7 @@ export default function Home() {
     } else {
       setEditingContact({
         ...result.contactInfo,
-        imageUrl: previewUrl,
+        imageUrl: dataUrl,
       });
       setIsFormOpen(true);
     }
@@ -71,8 +117,10 @@ export default function Home() {
       };
       setContacts([newContact, ...contacts]);
       // Reset uploader
-      setFileToUpload(null);
       setPreviewUrl(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
     setIsFormOpen(false);
     setEditingContact(null);
@@ -122,6 +170,29 @@ export default function Home() {
     });
   }, [contacts, searchTerm]);
 
+  const handleCapture = useCallback(() => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        setPreviewUrl(dataUrl);
+        setIsCameraOpen(false);
+      }
+    }
+  }, []);
+  
+  const clearPreview = () => {
+    setPreviewUrl(null);
+    if(fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
+  }
+
 
   return (
     <>
@@ -143,24 +214,41 @@ export default function Home() {
               <Card className="sticky top-24">
                 <CardHeader>
                   <CardTitle>Capture Card</CardTitle>
-                  <CardDescription>Upload a business card to extract contact info.</CardDescription>
+                  <CardDescription>Upload or take a photo of a business card.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="card-upload">Business Card Photo</Label>
-                    <div className="relative flex justify-center items-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary transition-colors">
-                      <Input id="card-upload" type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} />
+                    <Label>Business Card Photo</Label>
+                     <div className="relative w-full h-48 border-2 border-dashed rounded-lg">
                       {previewUrl ? (
-                        <Image src={previewUrl} alt="Business card preview" layout="fill" objectFit="contain" className="rounded-lg" />
+                        <>
+                          <Image src={previewUrl} alt="Business card preview" layout="fill" objectFit="contain" className="rounded-lg" />
+                           <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2 h-7 w-7"
+                            onClick={clearPreview}
+                          >
+                            <X className="h-4 w-4" />
+                            <span className="sr-only">Clear image</span>
+                          </Button>
+                        </>
                       ) : (
-                        <div className="text-center text-muted-foreground">
-                          <UploadCloud className="mx-auto h-10 w-10 mb-2" />
-                          <p>Click to upload or drag & drop</p>
-                        </div>
+                         <div className="flex flex-col justify-center items-center h-full text-center text-muted-foreground p-4">
+                           <UploadCloud className="mx-auto h-10 w-10 mb-2" />
+                           <p>Drag & drop or click to upload</p>
+                         </div>
                       )}
+                       <Input id="card-upload" ref={fileInputRef} type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} />
                     </div>
                   </div>
-                  <Button onClick={handleExtract} disabled={!fileToUpload || isLoading} className="w-full">
+                   <div className="flex gap-2">
+                      <Button variant="outline" className="w-full" onClick={() => setIsCameraOpen(true)}>
+                          <Camera className="mr-2 h-4 w-4" />
+                          Take Photo
+                      </Button>
+                    </div>
+                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || isLoading} className="w-full">
                     {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
                     {isLoading ? 'Extracting...' : 'Extract Information'}
                   </Button>
@@ -197,7 +285,7 @@ export default function Home() {
                 ) : (
                   <div className="text-center py-16 border-2 border-dashed rounded-lg">
                     <p className="text-muted-foreground">No contacts found.</p>
-                    <p className="text-sm text-muted-foreground">Upload a business card to get started.</p>
+                    <p className="text-sm text-muted-foreground">Upload or take a photo of a business card to get started.</p>
                   </div>
                 )}
               </div>
@@ -212,6 +300,31 @@ export default function Home() {
         onSave={handleSaveContact}
         onClose={() => setEditingContact(null)}
       />
+      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Take Photo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="w-full aspect-video bg-black rounded-md overflow-hidden relative">
+              <video ref={videoRef} className="w-full h-full object-contain" autoPlay muted playsInline />
+            </div>
+            {!hasCameraPermission && (
+              <Alert variant="destructive">
+                <AlertTitle>Camera Access Required</AlertTitle>
+                <AlertDescription>
+                  Please allow camera access in your browser to use this feature.
+                </AlertDescription>
+              </Alert>
+            )}
+            <Button onClick={handleCapture} disabled={!hasCameraPermission} className="w-full">
+              <Camera className="mr-2" />
+              Capture
+            </Button>
+            <canvas ref={canvasRef} className="hidden" />
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
