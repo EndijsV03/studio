@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,6 @@ import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
 import type { Contact } from '@/types';
 import { UploadCloud, Search, Download, Loader2, Camera, X } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function Home() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -24,53 +22,10 @@ export default function Home() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState(true);
 
   const { toast } = useToast();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isCameraOpen) {
-      // Stop camera stream when dialog is closed
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        videoRef.current.srcObject = null;
-      }
-      return;
-    }
-
-    const getCameraPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setHasCameraPermission(true);
-      } catch (error) {
-        console.error('Error accessing camera:', error);
-        setHasCameraPermission(false);
-        toast({
-          variant: 'destructive',
-          title: 'Camera Access Denied',
-          description: 'Please enable camera permissions in your browser settings to use this feature.',
-        });
-      }
-    };
-
-    getCameraPermission();
-
-    return () => {
-      // Cleanup: stop camera stream when component unmounts or dialog closes
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [isCameraOpen, toast]);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -121,6 +76,9 @@ export default function Home() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+      if (cameraInputRef.current) {
+        cameraInputRef.current.value = '';
+      }
     }
     setIsFormOpen(false);
     setEditingContact(null);
@@ -169,27 +127,14 @@ export default function Home() {
       );
     });
   }, [contacts, searchTerm]);
-
-  const handleCapture = useCallback(() => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/png');
-        setPreviewUrl(dataUrl);
-        setIsCameraOpen(false);
-      }
-    }
-  }, []);
   
   const clearPreview = () => {
     setPreviewUrl(null);
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
+    }
+    if (cameraInputRef.current) {
+        cameraInputRef.current.value = '';
     }
   }
 
@@ -243,10 +188,13 @@ export default function Home() {
                     </div>
                   </div>
                    <div className="flex gap-2">
-                      <Button variant="outline" className="w-full" onClick={() => setIsCameraOpen(true)}>
-                          <Camera className="mr-2 h-4 w-4" />
-                          Take Photo
+                      <Button asChild variant="outline" className="w-full">
+                          <Label htmlFor="camera-upload">
+                            <Camera className="mr-2 h-4 w-4" />
+                            Take Photo
+                          </Label>
                       </Button>
+                      <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
                     </div>
                   <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || isLoading} className="w-full">
                     {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
@@ -300,31 +248,6 @@ export default function Home() {
         onSave={handleSaveContact}
         onClose={() => setEditingContact(null)}
       />
-      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Take Photo</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="w-full aspect-video bg-black rounded-md overflow-hidden relative">
-              <video ref={videoRef} className="w-full h-full object-contain" autoPlay muted playsInline />
-            </div>
-            {!hasCameraPermission && (
-              <Alert variant="destructive">
-                <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>
-                  Please allow camera access in your browser to use this feature.
-                </AlertDescription>
-              </Alert>
-            )}
-            <Button onClick={handleCapture} disabled={!hasCameraPermission} className="w-full">
-              <Camera className="mr-2" />
-              Capture
-            </Button>
-            <canvas ref={canvasRef} className="hidden" />
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
