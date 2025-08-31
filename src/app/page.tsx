@@ -62,7 +62,7 @@ export default function Home() {
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readDataURL(file);
     }
   };
 
@@ -121,7 +121,6 @@ export default function Home() {
         toast({ title: "Contact Saved", description: "Successfully saved new contact." });
         clearPreview();
       }
-      // This is the key change: await the fetch inside the try block
       await fetchContacts(); 
     } catch(error) {
         console.error("Error saving contact:", error);
@@ -131,7 +130,6 @@ export default function Home() {
             description: "Could not save the contact.",
         });
     } finally {
-      // Refresh is done, now just close the form and reset state
       setIsLoading(false);
       setIsFormOpen(false);
       setEditingContact(null);
