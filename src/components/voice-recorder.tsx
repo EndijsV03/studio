@@ -2,15 +2,18 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, StopCircle, Play, Trash2 } from 'lucide-react';
+import { Mic, StopCircle, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
 
 interface VoiceRecorderProps {
+  contactId: string;
   voiceNoteUrl?: string;
   onSave: (url: string) => void;
 }
 
-export function VoiceRecorder({ voiceNoteUrl, onSave }: VoiceRecorderProps) {
+export function VoiceRecorder({ contactId, voiceNoteUrl, onSave }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioURL, setAudioURL] = useState(voiceNoteUrl);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -20,6 +23,24 @@ export function VoiceRecorder({ voiceNoteUrl, onSave }: VoiceRecorderProps) {
   useEffect(() => {
     setAudioURL(voiceNoteUrl);
   }, [voiceNoteUrl]);
+  
+  const uploadAudio = async (blob: Blob) => {
+    const storageRef = ref(storage, `voice-notes/${contactId}.wav`);
+    try {
+      const snapshot = await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      setAudioURL(downloadURL);
+      onSave(downloadURL);
+      toast({ title: 'Voice note saved!' });
+    } catch(e) {
+      console.error("Error uploading voice note:", e);
+      toast({
+        variant: 'destructive',
+        title: 'Upload Failed',
+        description: 'Could not save your voice note.',
+      });
+    }
+  }
 
   const startRecording = async () => {
     try {
@@ -30,11 +51,8 @@ export function VoiceRecorder({ voiceNoteUrl, onSave }: VoiceRecorderProps) {
       };
       mediaRecorder.current.onstop = () => {
         const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioURL(url);
-        onSave(url);
+        uploadAudio(audioBlob);
         audioChunks.current = [];
-        // Stop all tracks to turn off mic indicator
         stream.getTracks().forEach(track => track.stop());
       };
       mediaRecorder.current.start();
@@ -56,9 +74,21 @@ export function VoiceRecorder({ voiceNoteUrl, onSave }: VoiceRecorderProps) {
     }
   };
   
-  const handleDelete = () => {
-    setAudioURL(undefined);
-    onSave(''); // Pass empty string to signify deletion
+  const handleDelete = async () => {
+    if (!audioURL) return;
+    const storageRef = ref(storage, `voice-notes/${contactId}.wav`);
+    try {
+      await deleteObject(storageRef);
+      setAudioURL(undefined);
+      onSave(''); // Pass empty string to signify deletion
+      toast({ title: 'Voice note deleted' });
+    } catch (e) {
+      console.error("Error deleting voice note:", e);
+      // It might be already deleted or never existed.
+      // We still update the UI and database.
+       setAudioURL(undefined);
+       onSave('');
+    }
   }
 
   return (

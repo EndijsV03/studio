@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Loader2 } from 'lucide-react';
 
 interface ContactFormProps {
   isOpen: boolean;
@@ -15,9 +16,10 @@ interface ContactFormProps {
   contactData: Contact | Partial<Contact> | null;
   onSave: (contactData: Contact | Partial<Contact>) => void;
   onClose: () => void;
+  isLoading?: boolean;
 }
 
-export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose }: ContactFormProps) {
+export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose, isLoading = false }: ContactFormProps) {
   const [formData, setFormData] = useState<Partial<Contact>>({});
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{'id' in contactData ? 'Edit Contact' : 'New Contact Details'}</DialogTitle>
+          <DialogTitle>{'id' in contactData && contactData.id ? 'Edit Contact' : 'New Contact Details'}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           {formData.imageUrl && (
@@ -83,9 +85,12 @@ export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose
         </div>
         <DialogFooter>
             <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
+                <Button type="button" variant="secondary" disabled={isLoading}>Cancel</Button>
             </DialogClose>
-            <Button type="button" onClick={handleSave}>Save Contact</Button>
+            <Button type="button" onClick={handleSave} disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Contact
+            </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

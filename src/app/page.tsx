@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +21,7 @@ import { UploadCloud, Search, Download, Loader2, Camera, X } from 'lucide-react'
 export default function Home() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
@@ -26,6 +30,30 @@ export default function Home() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  
+  const fetchContacts = useCallback(async () => {
+    setIsFetching(true);
+    try {
+      const contactsCollection = collection(db, 'contacts');
+      const q = query(contactsCollection, orderBy('createdAt', 'desc'));
+      const contactsSnapshot = await getDocs(q);
+      const contactsList = contactsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contact));
+      setContacts(contactsList);
+    } catch (error) {
+      console.error("Error fetching contacts:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not fetch contacts from the database.",
+      });
+    }
+    setIsFetching(false);
+  }, [toast]);
+
+  useEffect(() => {
+    fetchContacts();
+  }, [fetchContacts]);
+
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -59,21 +87,50 @@ export default function Home() {
       setIsFormOpen(true);
     }
   };
+  
+  const uploadImageAndGetURL = async (dataUrl: string, contactId: string): Promise<string> => {
+    const storageRef = ref(storage, `contact-images/${contactId}`);
+    await uploadString(storageRef, dataUrl, 'data_url');
+    return getDownloadURL(storageRef);
+  };
 
-  const handleSaveContact = (contactData: Contact | Partial<Contact>) => {
-    if ('id' in contactData && contactData.id) {
-      // Update existing contact
-      setContacts(contacts.map((c) => (c.id === contactData.id ? (contactData as Contact) : c)));
-    } else {
-      // Add new contact
-      const newContact: Contact = {
-        id: new Date().toISOString(),
-        ...contactData,
-      };
-      setContacts([newContact, ...contacts]);
-      // Reset uploader
-      clearPreview();
+
+  const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
+    setIsLoading(true);
+    try {
+      if ('id' in contactData && contactData.id) {
+        // Update existing contact
+        const contactDoc = doc(db, 'contacts', contactData.id);
+        const { id, ...updateData } = contactData;
+        await updateDoc(contactDoc, updateData);
+        toast({ title: "Contact Updated", description: "Successfully updated the contact." });
+      } else {
+        // Add new contact
+        const docRef = await addDoc(collection(db, 'contacts'), {
+          ...contactData,
+          createdAt: serverTimestamp()
+        });
+        
+        // Upload image if it's a data URL
+        if (contactData.imageUrl && contactData.imageUrl.startsWith('data:')) {
+            const imageUrl = await uploadImageAndGetURL(contactData.imageUrl, docRef.id);
+            await updateDoc(docRef, { imageUrl });
+        }
+        
+        toast({ title: "Contact Saved", description: "Successfully saved new contact." });
+        // Reset uploader
+        clearPreview();
+      }
+      fetchContacts(); // Refresh list
+    } catch(error) {
+        console.error("Error saving contact:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not save the contact.",
+        });
     }
+    setIsLoading(false);
     setIsFormOpen(false);
     setEditingContact(null);
   };
@@ -83,12 +140,43 @@ export default function Home() {
     setIsFormOpen(true);
   };
 
-  const handleDeleteContact = (id: string) => {
-    setContacts(contacts.filter((c) => c.id !== id));
+  const handleDeleteContact = async (id: string, imageUrl?: string) => {
+    try {
+      await deleteDoc(doc(db, 'contacts', id));
+      if (imageUrl) {
+        const imageRef = ref(storage, imageUrl);
+        await deleteObject(imageRef).catch(err => {
+            // Ignore if file doesn't exist (e.g., manual deletion from storage)
+            if (err.code !== 'storage/object-not-found') {
+                throw err;
+            }
+        });
+      }
+      toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
+      fetchContacts(); // Refresh list
+    } catch(error) {
+       console.error("Error deleting contact:", error);
+       toast({
+           variant: "destructive",
+           title: "Error",
+           description: "Could not delete the contact.",
+       });
+    }
   };
   
-  const handleUpdateVoiceNote = (id: string, voiceNoteUrl: string) => {
-    setContacts(contacts.map((c) => (c.id === id ? { ...c, voiceNoteUrl } : c)));
+  const handleUpdateVoiceNote = async (id: string, voiceNoteUrl: string) => {
+    try {
+        const contactDoc = doc(db, 'contacts', id);
+        await updateDoc(contactDoc, { voiceNoteUrl });
+        fetchContacts();
+    } catch (error) {
+        console.error("Error updating voice note:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not update voice note.",
+        });
+    }
   };
 
   const handleExportCsv = () => {
@@ -212,7 +300,11 @@ export default function Home() {
                     </Button>
                   </div>
                 </div>
-                {filteredContacts.length > 0 ? (
+                {isFetching ? (
+                  <div className="flex justify-center items-center py-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : filteredContacts.length > 0 ? (
                    <div className="grid gap-6 md:grid-cols-2">
                     {filteredContacts.map(contact => (
                       <ContactCard 
@@ -241,6 +333,7 @@ export default function Home() {
         contactData={editingContact}
         onSave={handleSaveContact}
         onClose={() => setEditingContact(null)}
+        isLoading={isLoading}
       />
     </>
   );

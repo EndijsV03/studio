@@ -7,11 +7,23 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { VoiceRecorder } from '@/components/voice-recorder';
 import { User, Briefcase, Building, Phone, Mail, MapPin, Trash2, Pencil } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 
 interface ContactCardProps {
   contact: Contact;
   onEdit: (contact: Contact) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, imageUrl?: string) => void;
   onUpdateVoiceNote: (id: string, url: string) => void;
 }
 
@@ -60,6 +72,7 @@ export function ContactCard({ contact, onEdit, onDelete, onUpdateVoiceNote }: Co
       <Separator className="my-2" />
       <CardFooter className="flex flex-col items-start gap-4 p-4">
          <VoiceRecorder 
+          contactId={contact.id}
           voiceNoteUrl={contact.voiceNoteUrl}
           onSave={(url) => onUpdateVoiceNote(contact.id, url)}
         />
@@ -68,10 +81,27 @@ export function ContactCard({ contact, onEdit, onDelete, onUpdateVoiceNote }: Co
             <Pencil className="w-4 h-4" />
             <span className="sr-only">Edit Contact</span>
           </Button>
-          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => onDelete(contact.id)}>
-            <Trash2 className="w-4 h-4" />
-            <span className="sr-only">Delete Contact</span>
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                <Trash2 className="w-4 h-4" />
+                <span className="sr-only">Delete Contact</span>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the contact
+                  and remove their data from our servers.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(contact.id, contact.imageUrl)}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </CardFooter>
     </Card>
