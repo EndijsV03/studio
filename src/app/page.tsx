@@ -108,20 +108,19 @@ export default function Home() {
         // Add new contact
         const docRef = await addDoc(collection(db, 'contacts'), {
           ...contactData,
+          imageUrl: '', // Start with empty image URL
           createdAt: serverTimestamp()
         });
         
-        // Upload image if it's a data URL
+        // Upload image if it's a data URL and then update the doc
         if (contactData.imageUrl && contactData.imageUrl.startsWith('data:')) {
-            const imageUrl = await uploadImageAndGetURL(contactData.imageUrl, docRef.id);
-            await updateDoc(docRef, { imageUrl });
+            const finalImageUrl = await uploadImageAndGetURL(contactData.imageUrl, docRef.id);
+            await updateDoc(docRef, { imageUrl: finalImageUrl });
         }
         
         toast({ title: "Contact Saved", description: "Successfully saved new contact." });
-        // Reset uploader
         clearPreview();
       }
-      await fetchContacts(); // Refresh list
     } catch(error) {
         console.error("Error saving contact:", error);
         toast({
@@ -129,10 +128,12 @@ export default function Home() {
             title: "Error",
             description: "Could not save the contact.",
         });
+    } finally {
+      await fetchContacts(); // Refresh list after any operation
+      setIsLoading(false);
+      setIsFormOpen(false);
+      setEditingContact(null);
     }
-    setIsLoading(false);
-    setIsFormOpen(false);
-    setEditingContact(null);
   };
 
   const handleEditContact = (contact: Contact) => {
@@ -144,16 +145,17 @@ export default function Home() {
     try {
       await deleteDoc(doc(db, 'contacts', id));
       if (imageUrl) {
-        const imageRef = ref(storage, imageUrl);
-        await deleteObject(imageRef).catch(err => {
-            // Ignore if file doesn't exist (e.g., manual deletion from storage)
-            if (err.code !== 'storage/object-not-found') {
-                throw err;
-            }
-        });
+        // Only try to delete from storage if it's a gs:// or https:// URL
+        if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://')) {
+            const imageRef = ref(storage, imageUrl);
+            await deleteObject(imageRef).catch(err => {
+                if (err.code !== 'storage/object-not-found') {
+                    console.error("Could not delete image from storage:", err);
+                }
+            });
+        }
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
-      await fetchContacts(); // Refresh list
     } catch(error) {
        console.error("Error deleting contact:", error);
        toast({
@@ -161,6 +163,8 @@ export default function Home() {
            title: "Error",
            description: "Could not delete the contact.",
        });
+    } finally {
+        await fetchContacts(); // Refresh list after delete operation
     }
   };
   
