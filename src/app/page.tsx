@@ -35,7 +35,10 @@ export default function Home() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const fetchContacts = useCallback(async () => {
-    setIsFetching(true);
+    // Don't set fetching to true if it's a refresh
+    if (contacts.length === 0) {
+      setIsFetching(true);
+    }
     try {
       const contactsCollection = collection(db, 'contacts');
       const q = query(contactsCollection, orderBy('createdAt', 'desc'));
@@ -51,34 +54,12 @@ export default function Home() {
       });
     }
     setIsFetching(false);
-  }, [toast]);
+  }, [toast, contacts.length]);
 
   useEffect(() => {
     fetchContacts();
-  }, [fetchContacts]);
+  }, []); // Only run once on initial mount
   
-  useEffect(() => {
-    if (saveStatus === 'success') {
-      toast({
-        title: 'Contact Saved',
-        description: 'Successfully saved the contact.',
-      });
-      fetchContacts();
-      setIsFormOpen(false);
-      setEditingContact(null);
-      clearPreview();
-      setSaveStatus('idle'); // Reset status
-    } else if (saveStatus === 'error') {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Could not save the contact.',
-      });
-      setSaveStatus('idle'); // Reset status
-    }
-  }, [saveStatus, toast, fetchContacts]);
-
-
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -140,10 +121,26 @@ export default function Home() {
             await updateDoc(docRef, { imageUrl: finalImageUrl });
         }
       }
-      setSaveStatus('success');
+      
+      // Success state updates are now handled directly here
+      toast({
+        title: 'Contact Saved',
+        description: 'Successfully saved the contact.',
+      });
+      await fetchContacts(); // Await the fetch before closing the form
+      setIsFormOpen(false);
+      setEditingContact(null);
+      clearPreview();
+
     } catch(error) {
         console.error("Error saving contact:", error);
-        setSaveStatus('error');
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not save the contact.',
+        });
+    } finally {
+        setSaveStatus('idle'); // Reset status in finally block
     }
   };
 
@@ -293,7 +290,7 @@ export default function Home() {
                       <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
                     </div>
                   <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving'} className="w-full">
-                    {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
+                    {saveStatus === 'saving' && !isFormОpen ? <Loader2 className="animate-spin mr-2" /> : null}
                     {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
                   </Button>
                 </CardContent>
