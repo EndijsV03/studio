@@ -62,7 +62,7 @@ export default function Home() {
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
-      reader.readDataURL(file);
+      reader.readAsDataURL(file);
     }
   };
 
