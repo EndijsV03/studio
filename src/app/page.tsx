@@ -121,6 +121,8 @@ export default function Home() {
         toast({ title: "Contact Saved", description: "Successfully saved new contact." });
         clearPreview();
       }
+      // This is the key change: await the fetch inside the try block
+      await fetchContacts(); 
     } catch(error) {
         console.error("Error saving contact:", error);
         toast({
@@ -129,7 +131,7 @@ export default function Home() {
             description: "Could not save the contact.",
         });
     } finally {
-      await fetchContacts(); // Refresh list after any operation
+      // Refresh is done, now just close the form and reset state
       setIsLoading(false);
       setIsFormOpen(false);
       setEditingContact(null);
@@ -156,6 +158,7 @@ export default function Home() {
         }
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
+      await fetchContacts(); // Refresh list after delete operation
     } catch(error) {
        console.error("Error deleting contact:", error);
        toast({
@@ -163,8 +166,6 @@ export default function Home() {
            title: "Error",
            description: "Could not delete the contact.",
        });
-    } finally {
-        await fetchContacts(); // Refresh list after delete operation
     }
   };
   
