@@ -11,7 +11,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBxp2j0gZf-sIrOrOMTHnuo6RsohVTiwcQ",
   authDomain: "business-cards-59f22.firebaseapp.com",
   projectId: "business-cards-59f22",
-  storageBucket: "business-cards-59f22.appspot.com",
+  storageBucket: "business-cards-59f22.firebasestorage.app",
   messagingSenderId: "935421321413",
   appId: "1:935421321413:web:df472029ebe1b0209cd0ac"
 };
