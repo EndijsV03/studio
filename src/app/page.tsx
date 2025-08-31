@@ -153,7 +153,7 @@ export default function Home() {
         });
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
-      fetchContacts(); // Refresh list
+      await fetchContacts(); // Refresh list
     } catch(error) {
        console.error("Error deleting contact:", error);
        toast({
@@ -168,7 +168,7 @@ export default function Home() {
     try {
         const contactDoc = doc(db, 'contacts', id);
         await updateDoc(contactDoc, { voiceNoteUrl });
-        fetchContacts();
+        await fetchContacts();
     } catch (error) {
         console.error("Error updating voice note:", error);
         toast({
