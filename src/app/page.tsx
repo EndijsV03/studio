@@ -72,13 +72,7 @@ export default function Home() {
       };
       setContacts([newContact, ...contacts]);
       // Reset uploader
-      setPreviewUrl(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      if (cameraInputRef.current) {
-        cameraInputRef.current.value = '';
-      }
+      clearPreview();
     }
     setIsFormOpen(false);
     setEditingContact(null);
