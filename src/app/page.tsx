@@ -121,6 +121,7 @@ export default function Home() {
         toast({ title: "Contact Saved", description: "Successfully saved new contact." });
         clearPreview();
       }
+      // This is the key change: ensure fetchContacts is awaited
       await fetchContacts(); 
     } catch(error) {
         console.error("Error saving contact:", error);
@@ -146,7 +147,7 @@ export default function Home() {
       await deleteDoc(doc(db, 'contacts', id));
       if (imageUrl) {
         // Only try to delete from storage if it's a gs:// or https:// URL
-        if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://')) {
+        if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
             const imageRef = ref(storage, imageUrl);
             await deleteObject(imageRef).catch(err => {
                 if (err.code !== 'storage/object-not-found') {
@@ -156,7 +157,8 @@ export default function Home() {
         }
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
-      await fetchContacts(); // Refresh list after delete operation
+      // This is the key change: ensure fetchContacts is awaited
+      await fetchContacts();
     } catch(error) {
        console.error("Error deleting contact:", error);
        toast({
