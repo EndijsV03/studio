@@ -58,7 +58,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchContacts();
-  }, []); // Only run once on initial mount
+  }, [fetchContacts]); // Re-run if fetchContacts changes (due to useCallback dependencies)
   
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -122,12 +122,11 @@ export default function Home() {
         }
       }
       
-      // Success state updates are now handled directly here
       toast({
         title: 'Contact Saved',
         description: 'Successfully saved the contact.',
       });
-      await fetchContacts(); // Await the fetch before closing the form
+      await fetchContacts(); 
       setIsFormOpen(false);
       setEditingContact(null);
       clearPreview();
@@ -140,7 +139,7 @@ export default function Home() {
             description: 'Could not save the contact.',
         });
     } finally {
-        setSaveStatus('idle'); // Reset status in finally block
+        setSaveStatus('idle');
     }
   };
 
@@ -290,7 +289,7 @@ export default function Home() {
                       <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
                     </div>
                   <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving'} className="w-full">
-                    {saveStatus === 'saving' && !isFormОpen ? <Loader2 className="animate-spin mr-2" /> : null}
+                    {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
                     {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
                   </Button>
                 </CardContent>
