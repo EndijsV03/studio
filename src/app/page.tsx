@@ -18,14 +18,17 @@ import { extractContactInfoAction } from '@/app/actions';
 import type { Contact } from '@/types';
 import { UploadCloud, Search, Download, Loader2, Camera, X } from 'lucide-react';
 
+type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
+
 export default function Home() {
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
 
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +56,27 @@ export default function Home() {
   useEffect(() => {
     fetchContacts();
   }, [fetchContacts]);
+  
+  useEffect(() => {
+    if (saveStatus === 'success') {
+      toast({
+        title: 'Contact Saved',
+        description: 'Successfully saved the contact.',
+      });
+      fetchContacts();
+      setIsFormOpen(false);
+      setEditingContact(null);
+      clearPreview();
+      setSaveStatus('idle'); // Reset status
+    } else if (saveStatus === 'error') {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not save the contact.',
+      });
+      setSaveStatus('idle'); // Reset status
+    }
+  }, [saveStatus, toast, fetchContacts]);
 
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -68,10 +92,9 @@ export default function Home() {
 
   const handleExtract = async (dataUrl: string | null) => {
     if (!dataUrl) return;
-
-    setIsLoading(true);
+    setSaveStatus('saving');
     const result = await extractContactInfoAction(dataUrl);
-    setIsLoading(false);
+    setSaveStatus('idle');
 
     if ('error' in result) {
       toast({
@@ -96,14 +119,13 @@ export default function Home() {
 
 
   const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
-    setIsLoading(true);
+    setSaveStatus('saving');
     try {
       if ('id' in contactData && contactData.id) {
         // Update existing contact
         const contactDoc = doc(db, 'contacts', contactData.id);
         const { id, ...updateData } = contactData;
         await updateDoc(contactDoc, updateData);
-        toast({ title: "Contact Updated", description: "Successfully updated the contact." });
       } else {
         // Add new contact
         const docRef = await addDoc(collection(db, 'contacts'), {
@@ -117,22 +139,11 @@ export default function Home() {
             const finalImageUrl = await uploadImageAndGetURL(contactData.imageUrl, docRef.id);
             await updateDoc(docRef, { imageUrl: finalImageUrl });
         }
-        
-        toast({ title: "Contact Saved", description: "Successfully saved new contact." });
-        clearPreview();
       }
-      await fetchContacts(); 
+      setSaveStatus('success');
     } catch(error) {
         console.error("Error saving contact:", error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not save the contact.",
-        });
-    } finally {
-      setIsLoading(false);
-      setIsFormOpen(false);
-      setEditingContact(null);
+        setSaveStatus('error');
     }
   };
 
@@ -281,9 +292,9 @@ export default function Home() {
                       </Button>
                       <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
                     </div>
-                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || isLoading} className="w-full">
-                    {isLoading ? <Loader2 className="animate-spin mr-2" /> : null}
-                    {isLoading ? 'Extracting...' : 'Extract Information'}
+                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving'} className="w-full">
+                    {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
+                    {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
                   </Button>
                 </CardContent>
               </Card>
@@ -336,7 +347,7 @@ export default function Home() {
         contactData={editingContact}
         onSave={handleSaveContact}
         onClose={() => setEditingContact(null)}
-        isLoading={isLoading}
+        isLoading={saveStatus === 'saving'}
       />
     </>
   );
