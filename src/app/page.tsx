@@ -121,7 +121,6 @@ export default function Home() {
         toast({ title: "Contact Saved", description: "Successfully saved new contact." });
         clearPreview();
       }
-      // This is the key change: ensure fetchContacts is awaited
       await fetchContacts(); 
     } catch(error) {
         console.error("Error saving contact:", error);
@@ -157,7 +156,6 @@ export default function Home() {
         }
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
-      // This is the key change: ensure fetchContacts is awaited
       await fetchContacts();
     } catch(error) {
        console.error("Error deleting contact:", error);
