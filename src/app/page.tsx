@@ -121,7 +121,7 @@ export default function Home() {
         // Reset uploader
         clearPreview();
       }
-      fetchContacts(); // Refresh list
+      await fetchContacts(); // Refresh list
     } catch(error) {
         console.error("Error saving contact:", error);
         toast({
