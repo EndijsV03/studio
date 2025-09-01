@@ -79,7 +79,7 @@ const extractContactInfoFlow = ai.defineFlow(
       requests: [
         {
           image: { content: base64Image },
-          features: [{ type: 'TEXT_DETECTION' }],
+          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
         },
       ],
     };
