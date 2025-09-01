@@ -12,8 +12,11 @@ export async function extractContactInfoAction(
   } catch (e) {
     console.error(e);
     // This is a more user-friendly error message.
-    if (e instanceof Error && e.message.includes('media')) {
-      return { error: 'Failed to process image. The file may be corrupt or in an unsupported format.' };
+    if (e instanceof Error) {
+       if (e.message.includes('media')) {
+         return { error: 'Failed to process image. The file may be corrupt or in an unsupported format.' };
+       }
+       return { error: e.message };
     }
     return { error: 'An unexpected error occurred while extracting information. Please try again.' };
   }

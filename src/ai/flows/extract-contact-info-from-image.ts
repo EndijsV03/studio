@@ -95,8 +95,9 @@ const extractContactInfoFlow = ai.defineFlow(
 
     if (!visionResponse.ok) {
       const errorBody = await visionResponse.json();
-      console.error('Cloud Vision API Error:', errorBody);
-      throw new Error(`Cloud Vision API request failed with status ${visionResponse.status}: ${errorBody.error?.message || 'Unknown error'}`);
+      console.error('Cloud Vision API Error:', JSON.stringify(errorBody, null, 2));
+      const errorMessage = errorBody.error?.message || 'Unknown error from Vision API.';
+      throw new Error(`Cloud Vision API request failed: ${errorMessage}`);
     }
 
     const visionResult = await visionResponse.json();
