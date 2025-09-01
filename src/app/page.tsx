@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -104,29 +104,58 @@ export default function Home() {
     await uploadString(storageRef, dataUrl, 'data_url');
     return getDownloadURL(storageRef);
   };
+  
+  const uploadVoiceNoteAndGetURL = async (audioBlob: Blob, contactId: string): Promise<string> => {
+    const storageRef = ref(storage, `voice-notes/${contactId}.wav`);
+    await uploadBytes(storageRef, audioBlob);
+    return getDownloadURL(storageRef);
+  };
 
 
   const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
     setSaveStatus('saving');
     try {
-      if ('id' in contactData && contactData.id) {
-        // Update existing contact
-        const contactDoc = doc(db, 'contacts', contactData.id);
-        const { id, ...updateData } = contactData;
-        await updateDoc(contactDoc, updateData);
+      const { audioBlob, ...restOfContactData } = contactData as any;
+
+      if ('id' in restOfContactData && restOfContactData.id) {
+        // --- UPDATE EXISTING CONTACT ---
+        const contactDoc = doc(db, 'contacts', restOfContactData.id);
+        const { id, ...updateData } = restOfContactData;
+        
+        let voiceNoteUrl = updateData.voiceNoteUrl;
+        if(audioBlob) {
+            voiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, id);
+        }
+
+        await updateDoc(contactDoc, {...updateData, voiceNoteUrl});
+
       } else {
-        // Add new contact
+        // --- ADD NEW CONTACT ---
         const docRef = await addDoc(collection(db, 'contacts'), {
-          ...contactData,
+          ...restOfContactData,
           imageUrl: '', // Start with empty image URL
+          voiceNoteUrl: '', // Start with empty voice note URL
           createdAt: serverTimestamp()
         });
         
-        // Upload image if it's a data URL and then update the doc
-        if (contactData.imageUrl && contactData.imageUrl.startsWith('data:')) {
-            const finalImageUrl = await uploadImageAndGetURL(contactData.imageUrl, docRef.id);
-            await updateDoc(docRef, { imageUrl: finalImageUrl });
+        let finalImageUrl = '';
+        let finalVoiceNoteUrl = '';
+
+        // Upload image if it's a data URL
+        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
+            finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, docRef.id);
         }
+
+        // Upload voice note if a blob was passed
+        if (audioBlob) {
+            finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, docRef.id);
+        }
+
+        // Final update with all URLs
+        await updateDoc(docRef, { 
+          imageUrl: finalImageUrl,
+          voiceNoteUrl: finalVoiceNoteUrl
+        });
       }
       
       toast({
