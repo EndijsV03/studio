@@ -16,7 +16,14 @@ import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
 import type { Contact } from '@/types';
-import { UploadCloud, Search, Download, Loader2, Camera, X } from 'lucide-react';
+import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import * as XLSX from 'xlsx';
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
@@ -209,6 +216,20 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
+  const handleExportXlsx = () => {
+    const worksheet = XLSX.utils.json_to_sheet(contacts.map(c => ({
+      'Full Name': c.fullName,
+      'Job Title': c.jobTitle,
+      'Company Name': c.companyName,
+      'Phone Number': c.phoneNumber,
+      'Email Address': c.emailAddress,
+      'Physical Address': c.physicalAddress,
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Contacts');
+    XLSX.writeFile(workbook, 'CardSync_Pro_Contacts.xlsx');
+  };
+
   const filteredContacts = useMemo(() => {
     return contacts.filter(contact => {
       const search = searchTerm.toLowerCase();
@@ -304,10 +325,23 @@ export default function Home() {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input placeholder="Search contacts..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
-                    <Button variant="outline" onClick={handleExportCsv} disabled={contacts.length === 0}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Export
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" disabled={contacts.length === 0}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Export
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={handleExportCsv}>
+                          Export as CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportXlsx}>
+                          Export as XLSX
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {isFetching ? (
