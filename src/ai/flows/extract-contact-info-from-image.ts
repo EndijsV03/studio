@@ -70,7 +70,7 @@ const extractContactInfoFlow = ai.defineFlow(
   async (input) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('Google API key is not configured.');
+      throw new Error('Google API key is not configured. Please set the GEMINI_API_KEY environment variable.');
     }
 
     // 1. Extract raw text using Google Cloud Vision API
@@ -80,6 +80,9 @@ const extractContactInfoFlow = ai.defineFlow(
         {
           image: { content: base64Image },
           features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+          imageContext: {
+            languageHints: ['en'], // Add language hints for better accuracy
+          },
         },
       ],
     };
