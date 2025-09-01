@@ -1,12 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import type { Contact } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { VoiceRecorder } from '@/components/voice-recorder';
-import { User, Briefcase, Building, Phone, Mail, MapPin, Trash2, Pencil } from 'lucide-react';
+import { User, Briefcase, Building, Phone, Mail, MapPin, Trash2, Pencil, Copy, Check } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useToast } from '@/hooks/use-toast';
 
 
 interface ContactCardProps {
@@ -28,12 +30,20 @@ interface ContactCardProps {
 }
 
 export function ContactCard({ contact, onEdit, onDelete, onUpdateVoiceNote }: ContactCardProps) {
+  const { toast } = useToast();
+
+  const handleCopyEmail = () => {
+    if (contact.emailAddress) {
+      navigator.clipboard.writeText(contact.emailAddress);
+      toast({
+        title: 'Email Copied',
+        description: `${contact.emailAddress} has been copied to your clipboard.`,
+      });
+    }
+  };
+  
   const contactInfo = [
-    { icon: User, label: 'Full Name', value: contact.fullName },
-    { icon: Briefcase, label: 'Job Title', value: contact.jobTitle },
-    { icon: Building, label: 'Company', value: contact.companyName },
     { icon: Phone, label: 'Phone', value: contact.phoneNumber, href: `tel:${contact.phoneNumber}` },
-    { icon: Mail, label: 'Email', value: contact.emailAddress, href: `mailto:${contact.emailAddress}` },
     { icon: MapPin, label: 'Address', value: contact.physicalAddress },
   ];
 
@@ -54,7 +64,21 @@ export function ContactCard({ contact, onEdit, onDelete, onUpdateVoiceNote }: Co
         </div>
       </CardHeader>
       <CardContent className="flex-1 space-y-3">
-        {contactInfo.filter(info => info.value && !['Full Name', 'Job Title', 'Company'].includes(info.label)).map((info, index) => (
+        {contact.emailAddress && (
+            <div className="flex items-start gap-3">
+              <Mail className="w-4 h-4 mt-1 text-muted-foreground shrink-0" />
+              <div className="flex items-center gap-2 text-sm flex-1 min-w-0">
+                <a href={`mailto:${contact.emailAddress}`} className="hover:underline text-primary truncate" target="_blank" rel="noopener noreferrer">
+                  {contact.emailAddress}
+                </a>
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleCopyEmail}>
+                  <Copy className="h-3 w-3" />
+                  <span className="sr-only">Copy Email</span>
+                </Button>
+              </div>
+            </div>
+        )}
+        {contactInfo.filter(info => info.value).map((info, index) => (
           <div key={index} className="flex items-start gap-3">
             <info.icon className="w-4 h-4 mt-1 text-muted-foreground shrink-0" />
             <div className="text-sm">
