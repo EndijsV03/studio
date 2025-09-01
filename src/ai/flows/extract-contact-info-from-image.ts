@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview Extracts contact information from an image of a business card using the Google Cloud Vision API.
+ * @fileOverview Extracts contact information from an image of a business card using Google Cloud Vision API and a Genkit flow.
  *
  * - extractContactInfo - A function that handles the contact information extraction process.
  * - ExtractContactInfoInput - The input type for the extractContactInfo function.
@@ -8,6 +8,7 @@
  */
 
 import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
 
 const ExtractContactInfoInputSchema = z.object({
   photoDataUri: z
@@ -32,103 +33,79 @@ export type ExtractContactInfoOutput = z.infer<typeof ExtractContactInfoOutputSc
 
 
 /**
- * Extracts contact information from a business card image using Google Cloud Vision API.
+ * Extracts contact information from a business card image using Google Cloud Vision API and a Genkit flow.
  * @param input The input containing the base64 encoded image data URI.
  * @returns The extracted contact information.
  */
 export async function extractContactInfo(input: ExtractContactInfoInput): Promise<ExtractContactInfoOutput> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Google API key is not configured.');
-  }
-
-  // Extract the base64 content from the data URI
-  const base64Image = input.photoDataUri.split(',')[1];
-
-  const requestBody = {
-    requests: [
-      {
-        image: {
-          content: base64Image,
-        },
-        features: [
-          {
-            type: 'TEXT_DETECTION',
-          },
-        ],
-      },
-    ],
-  };
-
-  const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json();
-    console.error('Cloud Vision API Error:', errorBody);
-    throw new Error(`Cloud Vision API request failed with status ${response.status}: ${errorBody.error?.message || 'Unknown error'}`);
-  }
-
-  const result = await response.json();
-  const detection = result.responses?.[0];
-
-  if (!detection || !detection.fullTextAnnotation) {
-    return { contactInfo: {} }; // Return empty if no text is found
-  }
-
-  const fullText = detection.fullTextAnnotation.text;
-  
-  // This is a simplified parser. A more robust solution might use another LLM call to structure the data.
-  const contactInfo = parseContactInfo(fullText);
-
-  return { contactInfo };
+  return extractContactInfoFlow(input);
 }
 
+const structureContactInfoPrompt = ai.definePrompt({
+  name: 'structureContactInfoPrompt',
+  input: { schema: z.object({ text: z.string() }) },
+  output: { schema: ExtractContactInfoOutputSchema },
+  prompt: `You are an expert at parsing contact information from unstructured text extracted from a business card. 
+  
+  Your task is to identify and extract the following fields:
+  - Full Name (fullName)
+  - Job Title (jobTitle)
+  - Company Name (companyName)
+  - Phone Number (phoneNumber)
+  - Email Address (emailAddress)
+  - Physical Address (physicalAddress)
 
-function parseContactInfo(text: string): Partial<ExtractContactInfoOutput['contactInfo']> {
-    const contact: Partial<ExtractContactInfoOutput['contactInfo']> = {};
-    const lines = text.split('\n');
+  Here is the text from the business card:
+  
+  {{{text}}}
+  `,
+});
 
-    // Regex patterns for common fields
-    const emailRegex = /[\w.-]+@[\w.-]+\.\w+/;
-    const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
-    
-    // Naive assumption: First line is often the name or company
-    if (lines.length > 0) {
-      contact.fullName = lines[0]; 
+const extractContactInfoFlow = ai.defineFlow(
+  {
+    name: 'extractContactInfoFlow',
+    inputSchema: ExtractContactInfoInputSchema,
+    outputSchema: ExtractContactInfoOutputSchema,
+  },
+  async (input) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Google API key is not configured.');
     }
-    if (lines.length > 1) {
-       // Look for a job title in the first few lines
-       const possibleTitle = lines.slice(1, 3).find(l => !emailRegex.test(l) && !phoneRegex.test(l) && l.length < 50);
-       if(possibleTitle && lines[0].length < 50) {
-         contact.jobTitle = possibleTitle;
-       } else {
-         contact.companyName = lines[1];
-       }
-    }
 
-    lines.forEach(line => {
-        const emailMatch = line.match(emailRegex);
-        if (emailMatch) {
-            contact.emailAddress = emailMatch[0];
-        }
+    // 1. Extract raw text using Google Cloud Vision API
+    const base64Image = input.photoDataUri.split(',')[1];
+    const visionRequestBody = {
+      requests: [
+        {
+          image: { content: base64Image },
+          features: [{ type: 'TEXT_DETECTION' }],
+        },
+      ],
+    };
 
-        const phoneMatch = line.match(phoneRegex);
-        if (phoneMatch) {
-            contact.phoneNumber = phoneMatch[0];
-        }
+    const visionResponse = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(visionRequestBody),
     });
 
-    // A simple heuristic for address: look for multiple lines with numbers and street names.
-    const addressLines = lines.filter(line => /\d/.test(line) && /[a-zA-Z]/.test(line) && line.length > 10 && !phoneRegex.test(line) && !emailRegex.test(line));
-    if (addressLines.length > 0) {
-      contact.physicalAddress = addressLines.join(', ');
+    if (!visionResponse.ok) {
+      const errorBody = await visionResponse.json();
+      console.error('Cloud Vision API Error:', errorBody);
+      throw new Error(`Cloud Vision API request failed with status ${visionResponse.status}: ${errorBody.error?.message || 'Unknown error'}`);
     }
 
-    return contact;
-}
+    const visionResult = await visionResponse.json();
+    const detection = visionResult.responses?.[0];
+    const fullText = detection?.fullTextAnnotation?.text;
+
+    if (!fullText) {
+      return { contactInfo: {} }; // Return empty if no text is found
+    }
+
+    // 2. Use a generative model to structure the extracted text
+    const { output } = await structureContactInfoPrompt({ text: fullText });
+    return output!;
+  }
+);
