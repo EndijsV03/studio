@@ -119,11 +119,11 @@ export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md grid-rows-[auto_1fr_auto] max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>{'id' in contactData && contactData.id ? 'Edit Contact' : 'New Contact Details'}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 overflow-y-auto pr-4">
           {formData.imageUrl && (
              <div className="relative w-full h-40">
                 <Image src={formData.imageUrl} alt="Business card" layout="fill" objectFit="contain" className="rounded-md" data-ai-hint="business card"/>
@@ -177,7 +177,7 @@ export function ContactForm({ isOpen, onOpenChange, contactData, onSave, onClose
               </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-4">
             <DialogClose asChild>
                 <Button type="button" variant="secondary" disabled={isLoading}>Cancel</Button>
             </DialogClose>
