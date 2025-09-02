@@ -3,9 +3,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { auth, db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +18,7 @@ import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
 import type { Contact } from '@/types';
-import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown } from 'lucide-react';
+import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown, LogOut } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,11 +38,23 @@ export default function DashboardPage() {
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-
-
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  
+  const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthLoading(false);
+      } else {
+        router.push('/login');
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
   
   const fetchContacts = useCallback(async () => {
     // Don't set fetching to true if it's a refresh
@@ -65,8 +79,10 @@ export default function DashboardPage() {
   }, [toast, contacts.length]);
 
   useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]); // Re-run if fetchContacts changes (due to useCallback dependencies)
+    if (!isAuthLoading) {
+        fetchContacts();
+    }
+  }, [isAuthLoading, fetchContacts]);
   
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -281,6 +297,26 @@ export default function DashboardPage() {
     }
   }
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      router.push('/login');
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Sign Out Failed',
+        description: 'An error occurred while signing out.',
+      });
+    }
+  };
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -292,6 +328,10 @@ export default function DashboardPage() {
                 <Icons.logo className="h-8 w-8 text-primary" />
                 <h1 className="text-xl font-bold">CardSync Pro</h1>
               </Link>
+              <Button variant="outline" onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </header>

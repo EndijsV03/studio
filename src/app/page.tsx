@@ -15,10 +15,10 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button asChild variant="ghost">
-                <Link href="/dashboard">Log In</Link>
+                <Link href="/login">Log In</Link>
               </Button>
               <Button asChild>
-                <Link href="/dashboard">Sign Up</Link>
+                <Link href="/login">Sign Up</Link>
               </Button>
             </div>
           </div>
@@ -34,7 +34,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex justify-center gap-4">
             <Button asChild size="lg">
-              <Link href="/dashboard">Get Started for Free</Link>
+              <Link href="/login">Get Started for Free</Link>
             </Button>
           </div>
         </section>
@@ -83,7 +83,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-8">
                  <Button asChild size="lg">
-                    <Link href="/dashboard">Sign Up Now</Link>
+                    <Link href="/login">Sign Up Now</Link>
                 </Button>
             </div>
         </section>
