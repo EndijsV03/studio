@@ -4,8 +4,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   const router = useRouter();
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        setCurrentUser(user);
         setIsAuthLoading(false);
       } else {
         router.push('/login');
@@ -57,32 +59,49 @@ export default function DashboardPage() {
   }, [router]);
   
   const fetchContacts = useCallback(async () => {
+    if (!currentUser) return;
     // Don't set fetching to true if it's a refresh
     if (contacts.length === 0) {
       setIsFetching(true);
     }
     try {
       const contactsCollection = collection(db, 'contacts');
-      const q = query(contactsCollection, orderBy('createdAt', 'desc'));
+      // Query for contacts belonging to the current user
+      const q = query(
+        contactsCollection, 
+        where('userId', '==', currentUser.uid), 
+        orderBy('createdAt', 'desc')
+      );
       const contactsSnapshot = await getDocs(q);
       const contactsList = contactsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contact));
       setContacts(contactsList);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching contacts:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Could not fetch contacts from the database.",
-      });
+      // Firestore will suggest creating an index if one doesn't exist.
+      if (error.code === 'failed-precondition') {
+          toast({
+            variant: "destructive",
+            title: "Database Index Required",
+            description: "Please create the required Firestore index to query contacts. Check the console for a link.",
+          });
+          // Log the full error which contains the link to create the index
+          console.error(error);
+      } else {
+         toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Could not fetch contacts from the database.",
+        });
+      }
     }
     setIsFetching(false);
-  }, [toast, contacts.length]);
+  }, [toast, contacts.length, currentUser]);
 
   useEffect(() => {
-    if (!isAuthLoading) {
+    if (!isAuthLoading && currentUser) {
         fetchContacts();
     }
-  }, [isAuthLoading, fetchContacts]);
+  }, [isAuthLoading, currentUser, fetchContacts]);
   
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -117,19 +136,26 @@ export default function DashboardPage() {
   };
   
   const uploadImageAndGetURL = async (dataUrl: string, contactId: string): Promise<string> => {
-    const storageRef = ref(storage, `contact-images/${contactId}`);
+    if (!currentUser) throw new Error("User not authenticated for image upload.");
+    const storageRef = ref(storage, `contact-images/${currentUser.uid}/${contactId}`);
     await uploadString(storageRef, dataUrl, 'data_url');
     return getDownloadURL(storageRef);
   };
   
   const uploadVoiceNoteAndGetURL = async (audioBlob: Blob, contactId: string): Promise<string> => {
-    const storageRef = ref(storage, `voice-notes/${contactId}.wav`);
+     if (!currentUser) throw new Error("User not authenticated for voice note upload.");
+    const storageRef = ref(storage, `voice-notes/${currentUser.uid}/${contactId}.wav`);
     await uploadBytes(storageRef, audioBlob);
     return getDownloadURL(storageRef);
   };
 
 
   const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
+    if (!currentUser) {
+      toast({ variant: 'destructive', title: 'Not Authenticated', description: 'You must be logged in to save a contact.' });
+      return;
+    }
+
     setSaveStatus('saving');
     try {
       const { audioBlob, ...restOfContactData } = contactData as any;
@@ -150,6 +176,7 @@ export default function DashboardPage() {
         // --- ADD NEW CONTACT ---
         const docRef = await addDoc(collection(db, 'contacts'), {
           ...restOfContactData,
+          userId: currentUser.uid, // Add the user's ID
           imageUrl: '', // Start with empty image URL
           voiceNoteUrl: '', // Start with empty voice note URL
           createdAt: serverTimestamp()
@@ -204,7 +231,7 @@ export default function DashboardPage() {
   const handleDeleteContact = async (id: string, imageUrl?: string) => {
     try {
       await deleteDoc(doc(db, 'contacts', id));
-      if (imageUrl) {
+      if (imageUrl && currentUser) {
         // Only try to delete from storage if it's a gs:// or https:// URL
         if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
             const imageRef = ref(storage, imageUrl);
