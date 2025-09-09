@@ -12,6 +12,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  signOut,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,14 @@ export default function LoginPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.push('/dashboard');
+        if (user.emailVerified || user.providerData.some(p => p.providerId !== 'password')) {
+            router.push('/dashboard');
+        } else {
+             // User is signed in but email is not verified.
+             // We can let them stay here, or handle it.
+             // For now, we let the sign-in logic handle the toast message.
+             setIsAuthLoading(false);
+        }
       } else {
         setIsAuthLoading(false);
       }
@@ -74,12 +82,11 @@ export default function LoginPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await sendEmailVerification(userCredential.user);
+      await signOut(auth); // Sign out the user immediately
       toast({
         title: 'Verification Email Sent',
         description: 'A verification link has been sent to your email. Please verify your account before logging in.',
       });
-      // The user will not be logged in until they verify.
-      // onAuthStateChanged will redirect them once they log in after verification.
       setEmail('');
       setPassword('');
     } catch (error: any) {
@@ -98,8 +105,16 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // The onAuthStateChanged listener will handle the redirect
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      if (!userCredential.user.emailVerified) {
+        await signOut(auth); // Ensure user is logged out
+        toast({
+          variant: 'destructive',
+          title: 'Email Not Verified',
+          description: 'Please check your inbox and verify your email address to sign in.',
+        });
+      }
+      // If verified, the onAuthStateChanged listener will handle the redirect
     } catch (error: any) {
       console.error('Sign in error:', error);
       toast({
