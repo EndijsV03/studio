@@ -1,6 +1,8 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   signInWithPopup,
@@ -18,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -108,7 +110,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-secondary/50 p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-secondary/50 p-4">
       <Tabs defaultValue="sign-in" className="w-full max-w-sm">
         <div className="flex justify-center mb-4">
             <Icons.logo className="h-12 w-12 text-primary" />
@@ -202,6 +204,12 @@ export default function LoginPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      <Button asChild variant="link" className="mt-6 text-muted-foreground">
+        <Link href="/">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Home
+        </Link>
+      </Button>
     </div>
   );
 }
