@@ -11,6 +11,7 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendEmailVerification,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -71,8 +72,16 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      // The onAuthStateChanged listener will handle the redirect
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      await sendEmailVerification(userCredential.user);
+      toast({
+        title: 'Verification Email Sent',
+        description: 'A verification link has been sent to your email. Please verify your account before logging in.',
+      });
+      // The user will not be logged in until they verify.
+      // onAuthStateChanged will redirect them once they log in after verification.
+      setEmail('');
+      setPassword('');
     } catch (error: any) {
       console.error('Sign up error:', error);
       toast({
