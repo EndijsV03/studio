@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft } from 'lucide-react';
+import { PasswordResetDialog } from '@/components/password-reset-dialog';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -110,106 +112,119 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-secondary/50 p-4">
-      <Tabs defaultValue="sign-in" className="w-full max-w-sm">
-        <div className="flex justify-center mb-4">
-            <Icons.logo className="h-12 w-12 text-primary" />
-        </div>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="sign-in">Sign In</TabsTrigger>
-          <TabsTrigger value="sign-up">Sign Up</TabsTrigger>
-        </TabsList>
-        <TabsContent value="sign-in">
-          <Card>
-            <CardHeader>
-              <CardTitle>Welcome Back</CardTitle>
-              <CardDescription>Sign in to continue to your dashboard.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form onSubmit={handleEmailSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sign-in-email">Email</Label>
-                  <Input id="sign-in-email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+    <>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-secondary/50 p-4">
+        <Tabs defaultValue="sign-in" className="w-full max-w-sm">
+          <div className="flex justify-center mb-4">
+              <Icons.logo className="h-12 w-12 text-primary" />
+          </div>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="sign-in">Sign In</TabsTrigger>
+            <TabsTrigger value="sign-up">Sign Up</TabsTrigger>
+          </TabsList>
+          <TabsContent value="sign-in">
+            <Card>
+              <CardHeader>
+                <CardTitle>Welcome Back</CardTitle>
+                <CardDescription>Sign in to continue to your dashboard.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <form onSubmit={handleEmailSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sign-in-email">Email</Label>
+                    <Input id="sign-in-email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="sign-in-password">Password</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="p-0 h-auto text-xs"
+                        onClick={() => setIsResetDialogOpen(true)}
+                      >
+                        Forgot Password?
+                      </Button>
+                    </div>
+                    <Input id="sign-in-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                  </div>
+                  <Button className="w-full" type="submit" disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sign In
+                  </Button>
+                </form>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or continue with
+                    </span>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sign-in-password">Password</Label>
-                  <Input id="sign-in-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div className="grid grid-cols-2 gap-4">
+                  <Button variant="outline" onClick={() => handleOAuthSignIn('google')} disabled={isLoading}>
+                    Google
+                  </Button>
+                  <Button variant="outline" onClick={() => handleOAuthSignIn('microsoft')} disabled={isLoading}>
+                    Microsoft
+                  </Button>
                 </div>
-                <Button className="w-full" type="submit" disabled={isLoading}>
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sign In
-                </Button>
-              </form>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="sign-up">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create an Account</CardTitle>
+                <CardDescription>Enter your details below to get started.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <form onSubmit={handleEmailSignUp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sign-up-email">Email</Label>
+                    <Input id="sign-up-email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sign-up-password">Password</Label>
+                    <Input id="sign-up-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} />
+                  </div>
+                  <Button className="w-full" type="submit" disabled={isLoading}>
+                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sign Up
+                  </Button>
+                </form>
+                 <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or sign up with
+                    </span>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or continue with
-                  </span>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button variant="outline" onClick={() => handleOAuthSignIn('google')} disabled={isLoading}>
+                    Google
+                  </Button>
+                  <Button variant="outline" onClick={() => handleOAuthSignIn('microsoft')} disabled={isLoading}>
+                    Microsoft
+                  </Button>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" onClick={() => handleOAuthSignIn('google')} disabled={isLoading}>
-                  Google
-                </Button>
-                <Button variant="outline" onClick={() => handleOAuthSignIn('microsoft')} disabled={isLoading}>
-                  Microsoft
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="sign-up">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create an Account</CardTitle>
-              <CardDescription>Enter your details below to get started.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form onSubmit={handleEmailSignUp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sign-up-email">Email</Label>
-                  <Input id="sign-up-email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sign-up-password">Password</Label>
-                  <Input id="sign-up-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} />
-                </div>
-                <Button className="w-full" type="submit" disabled={isLoading}>
-                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sign Up
-                </Button>
-              </form>
-               <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Or sign up with
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" onClick={() => handleOAuthSignIn('google')} disabled={isLoading}>
-                  Google
-                </Button>
-                <Button variant="outline" onClick={() => handleOAuthSignIn('microsoft')} disabled={isLoading}>
-                  Microsoft
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-      <Button asChild variant="link" className="mt-6 text-muted-foreground">
-        <Link href="/">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
-        </Link>
-      </Button>
-    </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+        <Button asChild variant="link" className="mt-6 text-muted-foreground">
+          <Link href="/">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+          </Link>
+        </Button>
+      </div>
+      <PasswordResetDialog isOpen={isResetDialogOpen} onOpenChange={setIsResetDialogOpen} />
+    </>
   );
 }
