@@ -58,15 +58,8 @@ export default function LoginPage() {
     let provider;
     if (providerName === 'google') {
       provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
     } else {
       provider = new OAuthProvider('microsoft.com');
-      provider.setCustomParameters({
-        // Optional "tenant" parameter. "common" allows both personal and work accounts.
-        tenant: 'common',
-      });
     }
 
     try {
