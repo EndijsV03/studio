@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import {
   signInWithPopup,
   GoogleAuthProvider,
-  MicrosoftAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -62,7 +62,7 @@ export default function LoginPage() {
         prompt: 'select_account'
       });
     } else {
-      provider = new MicrosoftAuthProvider();
+      provider = new OAuthProvider('microsoft.com');
       provider.setCustomParameters({
         // Optional "tenant" parameter. "common" allows both personal and work accounts.
         tenant: 'common',
