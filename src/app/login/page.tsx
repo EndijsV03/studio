@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import {
   signInWithPopup,
   GoogleAuthProvider,
-  OAuthProvider,
+  MicrosoftAuthProvider,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -52,15 +52,25 @@ export default function LoginPage() {
     return () => unsubscribe();
   }, [router]);
 
-  const handleOAuthSignIn = async (provider: 'google' | 'microsoft') => {
+  const handleOAuthSignIn = async (providerName: 'google' | 'microsoft') => {
     setIsLoading(true);
-    const authProvider =
-      provider === 'google'
-        ? new GoogleAuthProvider()
-        : new OAuthProvider('microsoft.com');
+    
+    let provider;
+    if (providerName === 'google') {
+      provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+    } else {
+      provider = new MicrosoftAuthProvider();
+      provider.setCustomParameters({
+        // Optional "tenant" parameter. "common" allows both personal and work accounts.
+        tenant: 'common',
+      });
+    }
 
     try {
-      await signInWithPopup(auth, authProvider);
+      await signInWithPopup(auth, provider);
       // The onAuthStateChanged listener will handle the redirect
     } catch (error: any) {
       console.error('Authentication error:', error);
@@ -69,6 +79,8 @@ export default function LoginPage() {
         title: 'Authentication Failed',
         description: error.code === 'auth/account-exists-with-different-credential'
           ? 'An account already exists with this email address using a different sign-in method.'
+          : error.code === 'auth/popup-closed-by-user'
+          ? 'The sign-in window was closed before completing. Please try again.'
           : error.message || 'An unexpected error occurred.',
       });
     } finally {
