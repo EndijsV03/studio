@@ -60,6 +60,7 @@ export default function LoginPage() {
       provider = new GoogleAuthProvider();
     } else {
       provider = new OAuthProvider('microsoft.com');
+      provider.addScope('User.Read');
     }
 
     try {
