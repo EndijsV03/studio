@@ -8,9 +8,6 @@ import { useState } from 'react';
 import { createCheckoutSession } from '@/app/actions/stripe';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
-import { loadStripe } from '@stripe/stripe-js';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 const plans = [
   {
@@ -65,17 +62,9 @@ export default function BillingPage() {
             throw new Error('You must be logged in to upgrade.');
         }
         
-        const idToken = await user.getIdToken();
-        const response = await fetch('/api/stripe/checkout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${idToken}`,
-            },
-            body: JSON.stringify({ plan: planId }),
-        });
-
-        const { url, error } = await response.json();
+        // Server actions automatically handle authentication context on the backend
+        // when using the admin SDK, so we don't need to pass the token manually.
+        const { url, error } = await createCheckoutSession(planId);
 
         if (error) {
             throw new Error(error);
@@ -91,7 +80,8 @@ export default function BillingPage() {
             title: 'Error',
             description: error.message || 'Could not initiate checkout. Please try again.',
          });
-         setIsLoading(null);
+      } finally {
+        setIsLoading(null);
       }
   };
     
