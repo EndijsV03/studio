@@ -3,6 +3,47 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import Image from 'next/image';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Check } from 'lucide-react';
+
+const plans = [
+  {
+    name: 'Free',
+    price: '$0',
+    description: 'For individuals just getting started.',
+    features: [
+      '10 Business Card Scans',
+      'Contact Export (CSV, XLSX)',
+      'Voice Note Attachments',
+    ],
+    cta: 'Get Started',
+  },
+  {
+    name: 'Pro',
+    price: '$15',
+    pricePeriod: '/ month',
+    description: 'For professionals networking frequently.',
+    features: [
+      '1,000 Business Card Scans',
+      'Everything in Free',
+      'Priority Support',
+    ],
+    cta: 'Choose Pro',
+  },
+  {
+    name: 'Business',
+    price: '$40',
+    pricePeriod: '/ month',
+    description: 'For teams and power networkers.',
+    features: [
+      '10,000 Business Card Scans',
+      'Everything in Pro',
+      'Team Collaboration (Coming Soon)',
+    ],
+    cta: 'Choose Business',
+  },
+];
+
 
 export default function LandingPage() {
   return (
@@ -77,7 +118,47 @@ export default function LandingPage() {
             </div>
         </section>
 
-        <section className="container mx-auto px-4 sm:px-6 lg:px-8 text-center py-20 sm:py-24">
+        <section className="container mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-24">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Find the Perfect Plan
+            </h2>
+            <p className="mt-4 max-w-xl mx-auto text-lg text-muted-foreground">
+              Start for free and scale as you grow. All plans include our core AI features.
+            </p>
+          </div>
+          <div className="grid gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
+            {plans.map((plan) => (
+              <Card key={plan.name} className="flex flex-col">
+                <CardHeader>
+                  <CardTitle>{plan.name}</CardTitle>
+                  <CardDescription>{plan.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 space-y-6">
+                  <div className="text-4xl font-bold">
+                    {plan.price}
+                    {plan.pricePeriod && <span className="text-sm font-normal text-muted-foreground">{plan.pricePeriod}</span>}
+                  </div>
+                  <ul className="space-y-2">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-primary" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild className="w-full">
+                     <Link href="/login">{plan.cta}</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="container mx-auto px-4 sm:px-6 lg:px-8 text-center py-20 sm:py-24 bg-secondary/50">
             <h3 className="text-3xl font-bold tracking-tight">Ready to streamline your networking?</h3>
             <p className="mt-3 max-w-md mx-auto text-muted-foreground">
                 Start building your digital rolodex today.
