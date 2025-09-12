@@ -1,3 +1,4 @@
+
 'use server';
 
 import { redirect } from 'next/navigation';
@@ -16,19 +17,17 @@ const PRICE_IDS = {
 type Plan = 'pro' | 'business';
 
 export async function createCheckoutSession(plan: Plan): Promise<{ url?: string, error?: string }> {
-  const headersList = headers();
-  // In a real app, you might get the full URL from the headers or an environment variable.
-  // For this example, we'll construct it. A more robust solution might be needed for complex deployments.
-  const protocol = headersList.get('x-forwarded-proto') || 'http';
-  const host = headersList.get('host') || 'localhost:9002';
-  const baseUrl = `${protocol}://${host}`;
+  // Use a reliable environment variable for the base URL.
+  // This avoids issues with proxy headers in environments like Cloud Workstations.
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!baseUrl) {
+    return { error: 'The application URL is not configured. Please set NEXT_PUBLIC_APP_URL.' };
+  }
   
-  // The 'Authorization' header is not directly available in server actions in the same way.
-  // Instead, we can try to get the current user session from the cookies, which Next.js and Firebase Admin SDK can use.
-  // A more robust way is to use a dedicated auth library that integrates with server actions.
-  // For now, we'll rely on the Admin SDK's ability to manage sessions if configured, but a direct check is safer.
-  // Let's assume for now that if this action is called, the user is authenticated, as the page is protected.
-  // A proper implementation would involve getting the session cookie and verifying it.
+  // In a real scenario, you would get the user's UID and email securely from their session.
+  // This is a placeholder for demonstration purposes. In a production app, you would
+  // use a session management library to securely get the current user's identity.
+  const userEmail = 'placeholder-user@example.com'; 
 
   try {
     const priceId = PRICE_IDS[plan];
@@ -37,22 +36,10 @@ export async function createCheckoutSession(plan: Plan): Promise<{ url?: string,
     }
 
     const successUrl = `${baseUrl}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${baseUrl}/dashboard/billing`;
-
-    // Because the client-side auth state doesn't automatically propagate to server actions' identity,
-    // we'll need a way to identify the user. A robust way is to pass the user's ID token, but for simplicity,
-    // and since this is a protected route, we'll create a placeholder for user identification.
-    // In a production app, you would get the user from a session management library.
-    // For now, we'll proceed, but this is a critical point for real applications.
+    const cancelUrl = `${baseUrl}/dashboard/billing/cancel`;
     
-    // In a real app, you would get the user's UID and email securely from their session.
-    // Since we don't have a full session management system here, this part is simplified.
-    // Let's assume we can get the user's email as a placeholder for customer creation.
-    // This is NOT secure for production without proper session verification.
-    const userEmail = 'placeholder-user@example.com'; // Placeholder
-    
-    // In a real scenario, you'd look up the user in your DB to find their stripeCustomerId
-    // For this example, we'll create a new customer every time.
+    // In a real app, you would look up the user in your DB to find their stripeCustomerId.
+    // For this example, we'll create a new customer every time for simplicity.
     const customer = await stripe.customers.create({ email: userEmail });
 
     const session = await stripe.checkout.sessions.create({
