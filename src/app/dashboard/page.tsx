@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -5,7 +6,7 @@ import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -17,21 +18,33 @@ import { ContactForm } from '@/components/contact-form';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
-import type { Contact } from '@/types';
-import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown, LogOut } from 'lucide-react';
+import type { Contact, UserProfile } from '@/types';
+import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown, LogOut, Crown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import * as XLSX from 'xlsx';
 import Link from 'next/link';
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
+const PLAN_LIMITS = {
+    free: 10,
+    pro: 1000,
+    business: 10000,
+};
+
 export default function DashboardPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,17 +59,45 @@ export default function DashboardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const isAtLimit = useMemo(() => {
+    if (!userProfile) return false;
+    const limit = PLAN_LIMITS[userProfile.subscriptionPlan];
+    return userProfile.contactCount >= limit;
+  }, [userProfile]);
+
+  const fetchUserProfile = useCallback(async (user: User) => {
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await runTransaction(db, async (transaction) => {
+        const docSnapshot = await transaction.get(userDocRef);
+        if (!docSnapshot.exists()) {
+            // Create the profile if it doesn't exist
+            const newProfile: UserProfile = {
+                id: user.uid,
+                email: user.email || '',
+                subscriptionPlan: 'free',
+                contactCount: 0,
+                createdAt: serverTimestamp(),
+            };
+            transaction.set(userDocRef, newProfile);
+            return newProfile;
+        }
+        return docSnapshot.data() as UserProfile;
+    });
+    setUserProfile(userDoc);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        setIsAuthLoading(false);
+        fetchUserProfile(user);
       } else {
         router.push('/login');
       }
+      setIsAuthLoading(false);
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, fetchUserProfile]);
   
   const fetchContacts = useCallback(async () => {
     if (!currentUser) return;
@@ -75,6 +116,13 @@ export default function DashboardPage() {
       const contactsSnapshot = await getDocs(q);
       const contactsList = contactsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contact));
       setContacts(contactsList);
+
+      // Also update the user profile's contact count if it's out of sync
+      if (userProfile && contactsList.length !== userProfile.contactCount) {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userDocRef, { contactCount: contactsList.length });
+        setUserProfile(prev => prev ? { ...prev, contactCount: contactsList.length } : null);
+      }
     } catch (error: any) {
       console.error("Error fetching contacts:", error);
       // Firestore will suggest creating an index if one doesn't exist.
@@ -95,13 +143,14 @@ export default function DashboardPage() {
       }
     }
     setIsFetching(false);
-  }, [toast, contacts.length, currentUser]);
+  }, [toast, contacts.length, currentUser, userProfile]);
 
   useEffect(() => {
     if (!isAuthLoading && currentUser) {
         fetchContacts();
     }
-  }, [isAuthLoading, currentUser, fetchContacts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthLoading, currentUser]);
   
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -110,12 +159,20 @@ export default function DashboardPage() {
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readDataURL(file);
     }
   };
 
   const handleExtract = async (dataUrl: string | null) => {
     if (!dataUrl) return;
+    if (isAtLimit) {
+        toast({
+            variant: 'destructive',
+            title: 'Free Plan Limit Reached',
+            description: 'You have reached the 10 contact limit for the free plan. Please upgrade to add more.',
+        });
+        return;
+    }
     setSaveStatus('saving');
     const result = await extractContactInfoAction(dataUrl);
     setSaveStatus('idle');
@@ -159,6 +216,7 @@ export default function DashboardPage() {
     setSaveStatus('saving');
     try {
       const { audioBlob, ...restOfContactData } = contactData as any;
+      const userDocRef = doc(db, 'users', currentUser.uid);
 
       if ('id' in restOfContactData && restOfContactData.id) {
         // --- UPDATE EXISTING CONTACT ---
@@ -174,31 +232,47 @@ export default function DashboardPage() {
 
       } else {
         // --- ADD NEW CONTACT ---
-        const docRef = await addDoc(collection(db, 'contacts'), {
-          ...restOfContactData,
-          userId: currentUser.uid, // Add the user's ID
-          imageUrl: '', // Start with empty image URL
-          voiceNoteUrl: '', // Start with empty voice note URL
-          createdAt: serverTimestamp()
-        });
-        
-        let finalImageUrl = '';
-        let finalVoiceNoteUrl = '';
-
-        // Upload image if it's a data URL
-        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
-            finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, docRef.id);
+        if (isAtLimit) {
+            throw new Error('Limit reached');
         }
 
-        // Upload voice note if a blob was passed
-        if (audioBlob) {
-            finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, docRef.id);
-        }
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userDocRef);
+            if (!userDoc.exists()) {
+                throw "User profile does not exist!";
+            }
+            const currentCount = userDoc.data().contactCount || 0;
+            const limit = PLAN_LIMITS[userDoc.data().subscriptionPlan || 'free'];
+            if (currentCount >= limit) {
+                 throw new Error('Limit reached');
+            }
 
-        // Final update with all URLs
-        await updateDoc(docRef, { 
-          imageUrl: finalImageUrl,
-          voiceNoteUrl: finalVoiceNoteUrl
+            const newContactRef = doc(collection(db, 'contacts'));
+            transaction.set(newContactRef, {
+              ...restOfContactData,
+              userId: currentUser.uid,
+              imageUrl: '', 
+              voiceNoteUrl: '', 
+              createdAt: serverTimestamp()
+            });
+            
+            let finalImageUrl = '';
+            let finalVoiceNoteUrl = '';
+
+            if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
+                finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
+            }
+
+            if (audioBlob) {
+                finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
+            }
+
+            transaction.update(newContactRef, { 
+              imageUrl: finalImageUrl,
+              voiceNoteUrl: finalVoiceNoteUrl
+            });
+            
+            transaction.update(userDocRef, { contactCount: currentCount + 1 });
         });
       }
       
@@ -207,16 +281,20 @@ export default function DashboardPage() {
         description: 'Successfully saved the contact.',
       });
       await fetchContacts(); 
+      await fetchUserProfile(currentUser);
       setIsFormOpen(false);
       setEditingContact(null);
       clearPreview();
 
-    } catch(error) {
+    } catch(error: any) {
         console.error("Error saving contact:", error);
+        const description = error.message === 'Limit reached'
+            ? 'You have reached your contact limit. Please upgrade your plan.'
+            : 'Could not save the contact.';
         toast({
             variant: 'destructive',
             title: 'Error',
-            description: 'Could not save the contact.',
+            description,
         });
     } finally {
         setSaveStatus('idle');
@@ -229,10 +307,23 @@ export default function DashboardPage() {
   };
 
   const handleDeleteContact = async (id: string, imageUrl?: string) => {
+    if (!currentUser) return;
     try {
-      await deleteDoc(doc(db, 'contacts', id));
+        const contactDocRef = doc(db, 'contacts', id);
+        const userDocRef = doc(db, 'users', currentUser.uid);
+
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userDocRef);
+            if (!userDoc.exists()) {
+                throw "User profile does not exist!";
+            }
+            const currentCount = userDoc.data().contactCount || 0;
+            
+            transaction.delete(contactDocRef);
+            transaction.update(userDocRef, { contactCount: Math.max(0, currentCount - 1) });
+        });
+
       if (imageUrl && currentUser) {
-        // Only try to delete from storage if it's a gs:// or https:// URL
         if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
             const imageRef = ref(storage, imageUrl);
             await deleteObject(imageRef).catch(err => {
@@ -244,6 +335,7 @@ export default function DashboardPage() {
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
       await fetchContacts();
+      await fetchUserProfile(currentUser);
     } catch(error) {
        console.error("Error deleting contact:", error);
        toast({
@@ -324,20 +416,7 @@ export default function DashboardPage() {
     }
   }
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      router.push('/login');
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Sign Out Failed',
-        description: 'An error occurred while signing out.',
-      });
-    }
-  };
-
-  if (isAuthLoading) {
+  if (isAuthLoading || !userProfile) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -348,21 +427,6 @@ export default function DashboardPage() {
   return (
     <>
       <div className="flex flex-col min-h-screen">
-        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <Link href="/" className="flex items-center gap-2">
-                <Icons.logo className="h-8 w-8 text-primary" />
-                <h1 className="text-xl font-bold">CardSync Pro</h1>
-              </Link>
-              <Button variant="outline" onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </header>
-
         <main className="flex-1 container mx-auto p-4 sm:p-6 lg:p-8">
           <div className="grid gap-8 lg:grid-cols-12">
             <div className="lg:col-span-4">
@@ -372,6 +436,19 @@ export default function DashboardPage() {
                   <CardDescription>Upload or take a photo of a business card.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isAtLimit && (
+                    <Alert variant="destructive">
+                      <Crown className="h-4 w-4" />
+                      <AlertTitle>Free Plan Limit Reached</AlertTitle>
+                      <AlertDescription>
+                        You've reached your limit of 10 contacts.
+                        <Button asChild variant="link" className="p-0 ml-1 h-auto">
+                           <Link href="/dashboard/billing">Upgrade your plan</Link>
+                        </Button>
+                         to add more.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="space-y-2">
                     <Label>Business Card Photo</Label>
                      <div className="relative w-full h-48 border-2 border-dashed rounded-lg">
@@ -394,19 +471,19 @@ export default function DashboardPage() {
                            <p>Drag & drop or click to upload</p>
                          </div>
                       )}
-                       <Input id="card-upload" ref={fileInputRef} type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} />
+                       <Input id="card-upload" ref={fileInputRef} type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} disabled={isAtLimit} />
                     </div>
                   </div>
                    <div className="flex gap-2">
-                      <Button asChild variant="outline" className="w-full">
-                          <Label htmlFor="camera-upload">
+                      <Button asChild variant="outline" className="w-full" disabled={isAtLimit}>
+                          <Label htmlFor="camera-upload" className={isAtLimit ? 'cursor-not-allowed' : ''}>
                             <Camera className="mr-2 h-4 w-4" />
                             Take Photo
                           </Label>
                       </Button>
-                      <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+                      <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} disabled={isAtLimit} />
                     </div>
-                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving'} className="w-full">
+                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving' || isAtLimit} className="w-full">
                     {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
                     {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
                   </Button>
@@ -416,7 +493,10 @@ export default function DashboardPage() {
             <div className="lg:col-span-8">
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                  <h2 className="text-2xl font-bold tracking-tight">My Contacts ({filteredContacts.length})</h2>
+                   <div>
+                      <h2 className="text-2xl font-bold tracking-tight">My Contacts ({userProfile.contactCount} / {PLAN_LIMITS[userProfile.subscriptionPlan]})</h2>
+                      <p className="text-sm text-muted-foreground capitalize">{userProfile.subscriptionPlan} Plan</p>
+                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
                     <div className="relative w-full sm:w-64">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

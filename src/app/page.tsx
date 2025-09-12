@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -44,7 +45,7 @@ export default function LandingPage() {
                 <div className="grid md:grid-cols-2 gap-12 items-center">
                     <div>
                         <Image 
-                            src="https://picsum.photos/800/600"
+                            src="https://picsum.photos/seed/1/800/600"
                             width={800}
                             height={600}
                             alt="A person scanning a business card with their phone"

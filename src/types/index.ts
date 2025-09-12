@@ -1,8 +1,9 @@
+
 import type { Timestamp } from "firebase/firestore";
 
 export interface Contact {
   id: string;
-  userId?: string; // Add userId to the contact type
+  userId?: string; 
   fullName?: string;
   jobTitle?: string;
   companyName?: 'string';
@@ -12,4 +13,15 @@ export interface Contact {
   voiceNoteUrl?: string;
   imageUrl?: string;
   createdAt?: Timestamp;
+}
+
+export type SubscriptionPlan = 'free' | 'pro' | 'business';
+
+export interface UserProfile {
+    id: string;
+    email: string;
+    subscriptionPlan: SubscriptionPlan;
+    contactCount: number;
+    createdAt: Timestamp;
+    stripeCustomerId?: string;
 }
