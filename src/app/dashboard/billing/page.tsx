@@ -1,11 +1,16 @@
-
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { createCheckoutSession } from '@/app/actions/stripe';
+import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase';
+import { loadStripe } from '@stripe/stripe-js';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 const plans = [
   {
@@ -22,6 +27,7 @@ const plans = [
   },
   {
     name: 'Pro',
+    planId: 'pro',
     price: '$15',
     pricePeriod: '/ month',
     description: 'For professionals networking frequently.',
@@ -34,6 +40,7 @@ const plans = [
   },
   {
     name: 'Business',
+    planId: 'business',
     price: '$40',
     pricePeriod: '/ month',
     description: 'For teams and power networkers.',
@@ -47,14 +54,45 @@ const plans = [
 ];
 
 export default function BillingPage() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { toast } = useToast();
   
-  const handleUpgradeClick = (planName: string) => {
-      setIsLoading(true);
-      // This is where you would initiate the Stripe Checkout flow.
-      // For now, we'll just simulate a loading state.
-      console.log(`Upgrading to ${planName}`);
-      setTimeout(() => setIsLoading(false), 2000);
+  const handleUpgradeClick = async (planId: 'pro' | 'business') => {
+      setIsLoading(planId);
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+            throw new Error('You must be logged in to upgrade.');
+        }
+        
+        const idToken = await user.getIdToken();
+        const response = await fetch('/api/stripe/checkout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ plan: planId }),
+        });
+
+        const { url, error } = await response.json();
+
+        if (error) {
+            throw new Error(error);
+        }
+
+        if (url) {
+            window.location.href = url;
+        }
+
+      } catch (error: any) {
+         toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: error.message || 'Could not initiate checkout. Please try again.',
+         });
+         setIsLoading(null);
+      }
   };
     
   return (
@@ -86,18 +124,18 @@ export default function BillingPage() {
             <CardFooter>
               <Button 
                 className="w-full" 
-                disabled={plan.isCurrent || isLoading}
-                onClick={() => handleUpgradeClick(plan.name)}
+                disabled={plan.isCurrent || !!isLoading}
+                onClick={() => plan.planId && handleUpgradeClick(plan.planId as 'pro' | 'business')}
               >
-                {plan.cta}
+                {isLoading === plan.planId ? <Loader2 className="animate-spin" /> : plan.cta}
               </Button>
             </CardFooter>
           </Card>
         ))}
       </div>
        <div className="text-center text-sm text-muted-foreground pt-8">
-        <p>Payments will be powered by Stripe. You will be redirected to a secure payment page.</p>
-        <p>You can cancel your subscription at any time.</p>
+        <p>Payments are securely processed by Stripe.</p>
+        <p>You can manage or cancel your subscription at any time.</p>
       </div>
     </div>
   );
