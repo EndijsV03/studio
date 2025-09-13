@@ -233,46 +233,45 @@ export default function DashboardPage() {
       } else {
         // --- ADD NEW CONTACT ---
         if (isAtLimit) {
-            throw new Error('Limit reached');
+          throw new Error('Limit reached');
         }
 
+        // 1. First, create a document reference with a unique ID.
+        const newContactRef = doc(collection(db, 'contacts'));
+        let finalImageUrl = '';
+        let finalVoiceNoteUrl = '';
+
+        // 2. Perform file uploads BEFORE the transaction.
+        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
+          finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
+        }
+        if (audioBlob) {
+          finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
+        }
+
+        // 3. Now, run the quick transaction.
         await runTransaction(db, async (transaction) => {
-            const userDoc = await transaction.get(userDocRef);
-            if (!userDoc.exists()) {
-                throw "User profile does not exist!";
-            }
-            const currentCount = userDoc.data().contactCount || 0;
-            const limit = PLAN_LIMITS[userDoc.data().subscriptionPlan || 'free'];
-            if (currentCount >= limit) {
-                 throw new Error('Limit reached');
-            }
+          const userDoc = await transaction.get(userDocRef);
+          if (!userDoc.exists()) {
+            throw "User profile does not exist!";
+          }
+          const currentCount = userDoc.data().contactCount || 0;
+          const limit = PLAN_LIMITS[userDoc.data().subscriptionPlan || 'free'];
+          if (currentCount >= limit) {
+            throw new Error('Limit reached');
+          }
 
-            const newContactRef = doc(collection(db, 'contacts'));
-            transaction.set(newContactRef, {
-              ...restOfContactData,
-              userId: currentUser.uid,
-              imageUrl: '', 
-              voiceNoteUrl: '', 
-              createdAt: serverTimestamp()
-            });
-            
-            let finalImageUrl = '';
-            let finalVoiceNoteUrl = '';
-
-            if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
-                finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
-            }
-
-            if (audioBlob) {
-                finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
-            }
-
-            transaction.update(newContactRef, { 
-              imageUrl: finalImageUrl,
-              voiceNoteUrl: finalVoiceNoteUrl
-            });
-            
-            transaction.update(userDocRef, { contactCount: currentCount + 1 });
+          // Set the new contact data, including the now-resolved URLs.
+          transaction.set(newContactRef, {
+            ...restOfContactData,
+            userId: currentUser.uid,
+            imageUrl: finalImageUrl,
+            voiceNoteUrl: finalVoiceNoteUrl,
+            createdAt: serverTimestamp(),
+          });
+          
+          // Update the user's contact count.
+          transaction.update(userDocRef, { contactCount: currentCount + 1 });
         });
       }
       
