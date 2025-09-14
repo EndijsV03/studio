@@ -10,9 +10,10 @@ import { getAuth } from 'firebase-admin/auth';
 import type { UserProfile } from '@/types';
 
 // Replace these with your actual Stripe Price IDs from your Stripe dashboard.
+// Using common test price IDs for demonstration.
 const PRICE_IDS = {
-  pro: 'price_1S6djo2KSlelBWWNnPLltBAX', // Example: price_1PABC...
-  business: 'price_1S6dkf2KSlelBWWNeD4KalIb', // Example: price_1PXYZ...
+  pro: 'price_1L0f4a2eZvKYlo2Cc05k7f4b', // Example: Pro Plan Test ID
+  business: 'price_1L0f5O2eZvKYlo2CgY1Z3f9h', // Example: Business Plan Test ID
 };
 
 type Plan = 'pro' | 'business';
