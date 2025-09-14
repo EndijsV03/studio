@@ -36,6 +36,9 @@ import Link from 'next/link';
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
+// A type to hold both contact data and the associated file for new contacts
+type EditingContactPayload = (Partial<Contact> | Contact) & { imageFile?: File | null };
+
 const PLAN_LIMITS = {
     free: 10,
     pro: 1000,
@@ -49,7 +52,7 @@ export default function DashboardPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
+  const [editingContact, setEditingContact] = useState<EditingContactPayload | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -188,7 +191,8 @@ export default function DashboardPage() {
     } else {
       setEditingContact({
         ...result.contactInfo,
-        imageUrl: dataUrl,
+        imageUrl: dataUrl, // This is the previewUrl
+        imageFile: imageFile, // Associate the file with the contact data
       });
       setIsFormOpen(true);
     }
@@ -212,7 +216,7 @@ export default function DashboardPage() {
     return getDownloadURL(storageRef);
   };
 
-  const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
+  const handleSaveContact = async (contactPayload: EditingContactPayload) => {
     if (!currentUser) {
       toast({ variant: 'destructive', title: 'Not Authenticated', description: 'You must be logged in to save a contact.' });
       return;
@@ -220,7 +224,7 @@ export default function DashboardPage() {
 
     setSaveStatus('saving');
     try {
-      const { audioBlob, ...restOfContactData } = contactData as any;
+      const { audioBlob, imageFile: contactImageFile, ...restOfContactData } = contactPayload as any;
       const userDocRef = doc(db, 'users', currentUser.uid);
 
       if ('id' in restOfContactData && restOfContactData.id) {
@@ -246,8 +250,8 @@ export default function DashboardPage() {
         let finalVoiceNoteUrl = '';
 
         // Perform uploads BEFORE the transaction
-        if (imageFile) {
-           finalImageUrl = await uploadImageAndGetURL(imageFile, newContactRef.id);
+        if (contactImageFile) {
+           finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
         }
         
         if (audioBlob) {
