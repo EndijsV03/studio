@@ -12,8 +12,8 @@ import type { UserProfile } from '@/types';
 // Replace these with your actual Stripe Price IDs from your Stripe dashboard.
 // Using common test price IDs for demonstration.
 const PRICE_IDS = {
-  pro: 'price_1L0f4a2eZvKYlo2Cc05k7f4b', // Example: Pro Plan Test ID
-  business: 'price_1L0f5O2eZvKYlo2CgY1Z3f9h', // Example: Business Plan Test ID
+  pro: 'price_1HPv3l2eZvKYlo2CRWc1q1s3', // Example: Pro Plan Test ID
+  business: 'price_1HPv3l2eZvKYlo2Cs7C9p3f2', // Example: Business Plan Test ID
 };
 
 type Plan = 'pro' | 'business';
