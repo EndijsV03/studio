@@ -235,22 +235,20 @@ export default function DashboardPage() {
           throw new Error('Limit reached');
         }
         
-        // Step 1: Perform all uploads outside the transaction
         const newContactRef = doc(collection(db, 'contacts'));
         let finalImageUrl = '';
         let finalVoiceNoteUrl = '';
 
-        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
-          finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
-        }
+        // DEBUGGING: Temporarily disable image upload
+        // if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
+        //   finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
+        // }
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
         
-        // Step 2: Prepare a clean data object for Firestore, excluding the large data URI
         const { imageUrl, ...contactToSave } = restOfContactData;
 
-        // Step 3: Run the transaction with the clean data
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userDocRef);
           if (!userDoc.exists()) {
@@ -266,7 +264,7 @@ export default function DashboardPage() {
             ...contactToSave,
             id: newContactRef.id,
             userId: currentUser.uid,
-            imageUrl: finalImageUrl,
+            imageUrl: finalImageUrl, // Will be an empty string for this test
             voiceNoteUrl: finalVoiceNoteUrl,
             createdAt: serverTimestamp(),
           });
@@ -289,7 +287,7 @@ export default function DashboardPage() {
         console.error("Error saving contact:", error);
         const description = error.message === 'Limit reached'
             ? 'You have reached your contact limit. Please upgrade your plan.'
-            : 'Could not save the contact. The transaction may have timed out.';
+            : 'Could not save the contact. Please try again.';
         toast({
             variant: 'destructive',
             title: 'Error',
@@ -558,5 +556,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
