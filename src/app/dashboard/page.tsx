@@ -206,7 +206,6 @@ export default function DashboardPage() {
     return getDownloadURL(storageRef);
   };
 
-
   const handleSaveContact = async (contactData: Contact | Partial<Contact>) => {
     if (!currentUser) {
       toast({ variant: 'destructive', title: 'Not Authenticated', description: 'You must be logged in to save a contact.' });
@@ -246,6 +245,9 @@ export default function DashboardPage() {
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
+        
+        // Prepare a clean data object for Firestore, excluding the large data URI
+        const { imageUrl, ...contactToSave } = restOfContactData;
 
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userDocRef);
@@ -259,7 +261,7 @@ export default function DashboardPage() {
           }
 
           transaction.set(newContactRef, {
-            ...restOfContactData,
+            ...contactToSave,
             id: newContactRef.id,
             userId: currentUser.uid,
             imageUrl: finalImageUrl,
