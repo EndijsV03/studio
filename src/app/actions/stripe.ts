@@ -7,6 +7,7 @@ import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
 import { firestore } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import type { UserProfile } from '@/types';
 
 // Replace these with your actual Stripe Price IDs from your Stripe dashboard.
 const PRICE_IDS = {
@@ -16,36 +17,53 @@ const PRICE_IDS = {
 
 type Plan = 'pro' | 'business';
 
-export async function createCheckoutSession(plan: Plan): Promise<{ url?: string, error?: string }> {
-  // Use a reliable environment variable for the base URL.
-  // This avoids issues with proxy headers in environments like Cloud Workstations.
+interface CreateCheckoutSessionArgs {
+  plan: Plan;
+  userId: string;
+}
+
+export async function createCheckoutSession({ plan, userId }: CreateCheckoutSessionArgs): Promise<{ url?: string, error?: string }> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!baseUrl) {
     return { error: 'The application URL is not configured. Please set NEXT_PUBLIC_APP_URL.' };
   }
   
-  // In a real scenario, you would get the user's UID and email securely from their session.
-  // This is a placeholder for demonstration purposes. In a production app, you would
-  // use a session management library to securely get the current user's identity.
-  const userEmail = 'placeholder-user@example.com'; 
-
   try {
+    const userDocRef = firestore.collection('users').doc(userId);
+    const userDoc = await userDocRef.get();
+
+    if (!userDoc.exists) {
+      return { error: 'User not found.' };
+    }
+    const userProfile = userDoc.data() as UserProfile;
+
     const priceId = PRICE_IDS[plan];
     if (!priceId) {
       return { error: 'Invalid plan selected.' };
     }
 
+    let stripeCustomerId = userProfile.stripeCustomerId;
+
+    // Create a Stripe customer if one doesn't exist
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({ 
+        email: userProfile.email,
+        metadata: {
+          firebaseUID: userId,
+        },
+      });
+      stripeCustomerId = customer.id;
+      // Store the new customer ID in Firestore.
+      await userDocRef.update({ stripeCustomerId });
+    }
+
     const successUrl = `${baseUrl}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseUrl}/dashboard/billing/cancel`;
     
-    // In a real app, you would look up the user in your DB to find their stripeCustomerId.
-    // For this example, we'll create a new customer every time for simplicity.
-    const customer = await stripe.customers.create({ email: userEmail });
-
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
-      customer: customer.id,
+      customer: stripeCustomerId,
       line_items: [
         {
           price: priceId,
@@ -54,6 +72,11 @@ export async function createCheckoutSession(plan: Plan): Promise<{ url?: string,
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
+      // Pass the plan and user ID to the webhook/success page
+      metadata: {
+        plan: plan,
+        userId: userId,
+      }
     });
 
     if (!session.url) {

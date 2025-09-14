@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Check, Loader2 } from 'lucide-react';
@@ -62,9 +63,7 @@ export default function BillingPage() {
             throw new Error('You must be logged in to upgrade.');
         }
         
-        // Server actions automatically handle authentication context on the backend
-        // when using the admin SDK, so we don't need to pass the token manually.
-        const { url, error } = await createCheckoutSession(planId);
+        const { url, error } = await createCheckoutSession({ plan: planId, userId: user.uid });
 
         if (error) {
             throw new Error(error);
