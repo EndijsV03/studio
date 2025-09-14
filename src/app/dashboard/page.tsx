@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isFetching, setIsFetching] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | Partial<Contact> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,6 +156,7 @@ export default function DashboardPage() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
@@ -192,17 +194,14 @@ export default function DashboardPage() {
     }
   };
   
-  const uploadImageAndGetURL = async (dataUrl: string, contactId: string): Promise<string> => {
+  const uploadImageAndGetURL = async (file: File, contactId: string): Promise<string> => {
     if (!currentUser) throw new Error("User not authenticated for image upload.");
-    const storageRef = ref(storage, `contact-images/${currentUser.uid}/${contactId}`);
+    const storageRef = ref(storage, `contact-images/${currentUser.uid}/${contactId}.webp`);
     
-    // The key fix: remove the data URI prefix before uploading
-    const base64Data = dataUrl.split(',')[1];
-    if (!base64Data) {
-      throw new Error("Invalid data URL provided for image upload.");
-    }
+    // Convert to a webp blob for efficiency
+    const blob = new Blob([file], { type: 'image/webp' });
 
-    await uploadString(storageRef, base64Data, 'base64');
+    await uploadBytes(storageRef, blob);
     return getDownloadURL(storageRef);
   };
   
@@ -247,14 +246,15 @@ export default function DashboardPage() {
         let finalVoiceNoteUrl = '';
 
         // Perform uploads BEFORE the transaction
-        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
-           finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
+        if (imageFile) {
+           finalImageUrl = await uploadImageAndGetURL(imageFile, newContactRef.id);
         }
         
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
         
+        // Prepare a clean data object for Firestore, removing the temporary UI-only imageUrl
         const { imageUrl, ...contactToSave } = restOfContactData;
 
         await runTransaction(db, async (transaction) => {
@@ -413,6 +413,7 @@ export default function DashboardPage() {
   
   const clearPreview = () => {
     setPreviewUrl(null);
+    setImageFile(null);
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -564,5 +565,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
