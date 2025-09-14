@@ -234,7 +234,8 @@ export default function DashboardPage() {
         if (isAtLimit) {
           throw new Error('Limit reached');
         }
-
+        
+        // Step 1: Perform all uploads outside the transaction
         const newContactRef = doc(collection(db, 'contacts'));
         let finalImageUrl = '';
         let finalVoiceNoteUrl = '';
@@ -246,9 +247,10 @@ export default function DashboardPage() {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
         
-        // Prepare a clean data object for Firestore, excluding the large data URI
+        // Step 2: Prepare a clean data object for Firestore, excluding the large data URI
         const { imageUrl, ...contactToSave } = restOfContactData;
 
+        // Step 3: Run the transaction with the clean data
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userDocRef);
           if (!userDoc.exists()) {
@@ -287,7 +289,7 @@ export default function DashboardPage() {
         console.error("Error saving contact:", error);
         const description = error.message === 'Limit reached'
             ? 'You have reached your contact limit. Please upgrade your plan.'
-            : 'Could not save the contact.';
+            : 'Could not save the contact. The transaction may have timed out.';
         toast({
             variant: 'destructive',
             title: 'Error',
@@ -556,3 +558,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
