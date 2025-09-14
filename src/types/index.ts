@@ -6,7 +6,7 @@ export interface Contact {
   userId?: string; 
   fullName?: string;
   jobTitle?: string;
-  companyName?: 'string';
+  companyName?: string;
   phoneNumber?: string;
   emailAddress?: string;
   physicalAddress?: string;
