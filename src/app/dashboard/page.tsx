@@ -6,7 +6,7 @@ import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, runTransaction, setDoc } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -260,6 +260,7 @@ export default function DashboardPage() {
 
           transaction.set(newContactRef, {
             ...restOfContactData,
+            id: newContactRef.id,
             userId: currentUser.uid,
             imageUrl: finalImageUrl,
             voiceNoteUrl: finalVoiceNoteUrl,
