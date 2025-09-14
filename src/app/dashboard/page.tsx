@@ -250,9 +250,9 @@ export default function DashboardPage() {
         let finalVoiceNoteUrl = '';
 
         // Perform uploads BEFORE the transaction
-        if (contactImageFile) {
-           finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
-        }
+        // if (contactImageFile) {
+        //    finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
+        // }
         
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
