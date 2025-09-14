@@ -195,7 +195,14 @@ export default function DashboardPage() {
   const uploadImageAndGetURL = async (dataUrl: string, contactId: string): Promise<string> => {
     if (!currentUser) throw new Error("User not authenticated for image upload.");
     const storageRef = ref(storage, `contact-images/${currentUser.uid}/${contactId}`);
-    await uploadString(storageRef, dataUrl, 'data_url');
+    
+    // The key fix: remove the data URI prefix before uploading
+    const base64Data = dataUrl.split(',')[1];
+    if (!base64Data) {
+      throw new Error("Invalid data URL provided for image upload.");
+    }
+
+    await uploadString(storageRef, base64Data, 'base64');
     return getDownloadURL(storageRef);
   };
   
@@ -239,10 +246,11 @@ export default function DashboardPage() {
         let finalImageUrl = '';
         let finalVoiceNoteUrl = '';
 
-        // DEBUGGING: Temporarily disable image upload
-        // if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
-        //   finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
-        // }
+        // Perform uploads BEFORE the transaction
+        if (restOfContactData.imageUrl && restOfContactData.imageUrl.startsWith('data:')) {
+           finalImageUrl = await uploadImageAndGetURL(restOfContactData.imageUrl, newContactRef.id);
+        }
+        
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
@@ -264,7 +272,7 @@ export default function DashboardPage() {
             ...contactToSave,
             id: newContactRef.id,
             userId: currentUser.uid,
-            imageUrl: finalImageUrl, // Will be an empty string for this test
+            imageUrl: finalImageUrl,
             voiceNoteUrl: finalVoiceNoteUrl,
             createdAt: serverTimestamp(),
           });
@@ -556,3 +564,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
