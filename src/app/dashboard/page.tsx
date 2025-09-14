@@ -37,7 +37,7 @@ import Link from 'next/link';
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 // A type to hold both contact data and the associated file for new contacts
-type EditingContactPayload = (Partial<Contact> | Contact) & { imageFile?: File | null };
+type EditingContactPayload = (Partial<Contact> | Contact) & { imageFile?: File | null; audioBlob?: Blob };
 
 const PLAN_LIMITS = {
     free: 10,
@@ -224,7 +224,7 @@ export default function DashboardPage() {
 
     setSaveStatus('saving');
     try {
-      const { audioBlob, imageFile: contactImageFile, ...restOfContactData } = contactPayload as any;
+      const { audioBlob, imageFile: contactImageFile, ...restOfContactData } = contactPayload;
       const userDocRef = doc(db, 'users', currentUser.uid);
 
       if ('id' in restOfContactData && restOfContactData.id) {
@@ -259,7 +259,7 @@ export default function DashboardPage() {
         }
         
         // Prepare a clean data object for Firestore, removing the temporary UI-only imageUrl
-        const { imageUrl, ...contactToSave } = restOfContactData;
+        const { imageUrl, ...contactDataForDb } = restOfContactData;
 
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userDocRef);
@@ -273,7 +273,7 @@ export default function DashboardPage() {
           }
 
           transaction.set(newContactRef, {
-            ...contactToSave,
+            ...contactDataForDb,
             id: newContactRef.id,
             userId: currentUser.uid,
             imageUrl: finalImageUrl,
@@ -309,6 +309,7 @@ export default function DashboardPage() {
         setSaveStatus('idle');
     }
   };
+
 
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
@@ -569,3 +570,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
