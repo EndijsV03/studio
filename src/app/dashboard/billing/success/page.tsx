@@ -22,6 +22,7 @@ function SuccessContent() {
       return;
     }
 
+    // This function calls the server action to securely update the user's subscription.
     async function updateSubscription() {
       const { success, error } = await handleSubscriptionChange(sessionId!);
       if (success) {
@@ -35,6 +36,7 @@ function SuccessContent() {
     updateSubscription();
   }, [sessionId]);
 
+  // Show a loading state while we verify the payment.
   if (status === 'loading') {
     return (
       <Card className="w-full max-w-md text-center">
@@ -44,13 +46,14 @@ function SuccessContent() {
           </div>
           <CardTitle className="mt-4 text-2xl">Finalizing Your Subscription...</CardTitle>
           <CardDescription>
-            Please wait while we confirm your payment and update your account.
+            Please wait while we confirm your payment and update your account. This may take a few seconds.
           </CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
+  // Show an error message if something went wrong.
   if (status === 'error') {
     return (
       <Card className="w-full max-w-md text-center">
@@ -72,6 +75,7 @@ function SuccessContent() {
     );
   }
 
+  // Show the final success message.
   return (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
@@ -95,6 +99,7 @@ function SuccessContent() {
 
 export default function SuccessPage() {
   return (
+    // The Suspense boundary is good practice for pages that use search parameters.
     <div className="flex items-center justify-center h-full">
        <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
          <SuccessContent />

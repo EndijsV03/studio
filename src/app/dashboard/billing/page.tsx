@@ -59,7 +59,7 @@ export default function BillingPage() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { toast } = useToast();
   
-  const handleUpgradeClick = async (planId: 'pro' | 'business') => {
+  const handleUpgradeClick = (planId: 'pro' | 'business') => {
       setIsLoading(planId);
       try {
         const user = auth.currentUser;
@@ -68,13 +68,15 @@ export default function BillingPage() {
         }
         
         const paymentLink = paymentLinks[planId];
-        // Construct the URL with parameters
+        // Construct the URL with the client_reference_id to identify the user
         const url = new URL(paymentLink);
         url.searchParams.append('client_reference_id', user.uid);
+        // Prefill the user's email for a smoother checkout experience
         if (user.email) {
             url.searchParams.append('prefilled_email', user.email);
         }
 
+        // Redirect the user to the Stripe Checkout page
         window.location.href = url.toString();
 
       } catch (error: any) {

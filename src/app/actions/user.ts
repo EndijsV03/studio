@@ -5,11 +5,11 @@ import { stripe } from '@/lib/stripe';
 import { firestore } from '@/lib/firebase-admin';
 import type { SubscriptionPlan } from '@/types';
 
-// The Price IDs from your Stripe dashboard.
-// These are used to identify which plan was purchased.
+// This mapping connects the Stripe Price ID to your internal plan names.
+// Ensure these Price IDs match the ones in your Stripe Payment Links.
 const PRICE_ID_TO_PLAN_MAP: Record<string, SubscriptionPlan> = {
-  'price_1PKw0B2KSlelBWWN8zTv812a': 'pro', // Replace with your actual Pro Price ID
-  'price_1PKw1b2KSlelBWWNACTEtD3L': 'business', // Replace with your actual Business Price ID
+  'price_1PKw0B2KSlelBWWN8zTv812a': 'pro', // Pro Plan Price ID from your Stripe dashboard
+  'price_1PKw1b2KSlelBWWNACTEtD3L': 'business', // Business Plan Price ID
 };
 
 /**
@@ -24,20 +24,24 @@ export async function handleSubscriptionChange(sessionId: string): Promise<{ suc
   }
 
   try {
+    // 1. Retrieve the session from Stripe to verify it's valid and paid.
+    // We expand 'line_items' to see what was purchased.
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['line_items'],
     });
 
+    // 2. Check if the payment was successful.
     if (session.payment_status !== 'paid') {
       return { success: false, error: 'Payment was not successful.' };
     }
 
+    // 3. Get the user ID from the client_reference_id we passed in the URL.
     const userId = session.client_reference_id;
     if (!userId) {
       return { success: false, error: 'User ID was not found in the Stripe session.' };
     }
 
-    // Determine the plan purchased from the line items
+    // 4. Determine which plan was purchased from the price ID in the line items.
     const priceId = session.line_items?.data[0]?.price?.id;
     if (!priceId) {
       return { success: false, error: 'Could not determine the purchased plan.' };
@@ -45,20 +49,22 @@ export async function handleSubscriptionChange(sessionId: string): Promise<{ suc
 
     const plan = PRICE_ID_TO_PLAN_MAP[priceId];
     if (!plan) {
+      // This error means the Price ID from Stripe doesn't match our mapping.
+      // This can happen if the Payment Links are updated without updating the code.
       return { success: false, error: `Unrecognized price ID: ${priceId}` };
     }
-
-    // Update the user's profile in Firestore
-    const userDocRef = firestore.collection('users').doc(userId);
     
-    // Also store the Stripe Customer ID for future use (e.g., billing portal)
+    // 5. Get the Stripe Customer ID for future use (e.g., billing portal).
     const stripeCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
 
+    // 6. Update the user's profile in Firestore with the new plan.
+    const userDocRef = firestore.collection('users').doc(userId);
     await userDocRef.update({
       subscriptionPlan: plan,
       stripeCustomerId: stripeCustomerId || null,
     });
     
+    console.log(`Successfully updated user ${userId} to plan ${plan}`);
     return { success: true };
     
   } catch (error: any) {
