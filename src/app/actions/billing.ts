@@ -2,38 +2,29 @@
 'use server';
 
 import { stripe } from '@/lib/stripe';
-import { auth, firestore } from '@/lib/firebase-admin';
+import { auth as adminAuth, firestore } from '@/lib/firebase-admin';
 import { headers } from 'next/headers';
-import { getApps, getApp, initializeApp } from 'firebase/app';
-import { getAuth as getClientAuth, onAuthStateChanged } from 'firebase/auth';
-import { auth as clientAuth } from '@/lib/firebase';
-
-// This is a placeholder. In a real app, you would get the user from your session/auth state.
-// For this example, we'll assume a hardcoded user for demonstration purposes.
-// A real implementation would involve getting the current user's session.
-async function getCurrentUserId(): Promise<string | null> {
-    // This is a simplified way to get the user.
-    // In a real app you might use cookies or another session management strategy.
-    return new Promise((resolve, reject) => {
-        const unsubscribe = onAuthStateChanged(clientAuth, (user) => {
-            unsubscribe();
-            if (user) {
-                resolve(user.uid);
-            } else {
-                resolve(null);
-            }
-        }, reject);
-    });
-}
 
 const PRICE_ID_MAP = {
   pro: 'price_1PKw0B2KSlelBWWN8zTv812a',
   business: 'price_1PKw1b2KSlelBWWNACTEtD3L',
 };
 
-export async function createCheckoutSession(planId: 'pro' | 'business') {
+export async function createCheckoutSession(planId: 'pro' | 'business', idToken: string) {
   try {
-    const user = clientAuth.currentUser;
+    let decodedToken;
+    try {
+        decodedToken = await adminAuth.verifyIdToken(idToken);
+    } catch (error) {
+        console.error("Error verifying ID token:", error);
+        return { error: 'Authentication failed. Please log in again.' };
+    }
+    
+    const user = {
+        uid: decodedToken.uid,
+        email: decodedToken.email,
+        displayName: decodedToken.name,
+    };
 
     if (!user) {
       return { error: 'You must be logged in to subscribe.' };
@@ -71,7 +62,7 @@ export async function createCheckoutSession(planId: 'pro' | 'business') {
         }],
         mode: 'subscription',
         success_url: `${origin}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${origin}/dashboard/billing/cancel`,
+        cancel_url: `${origin}/dashboard/billing`,
         metadata: {
             userId: user.uid,
             planId,

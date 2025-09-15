@@ -5,9 +5,10 @@ import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { createCheckoutSession } from '@/app/actions/billing';
+import { auth } from '@/lib/firebase';
 
 const plans = [
   {
@@ -52,13 +53,21 @@ const plans = [
 
 export default function BillingPage() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   
   const handleUpgradeClick = (planId: 'pro' | 'business') => {
       setIsLoading(planId);
       startTransition(async () => {
         try {
-          const result = await createCheckoutSession(planId);
+          const user = auth.currentUser;
+          if (!user) {
+            throw new Error('You must be logged in to subscribe.');
+          }
+          
+          const idToken = await user.getIdToken();
+          const result = await createCheckoutSession(planId, idToken);
+
           if (result.url) {
             window.location.href = result.url;
           } else {
@@ -73,11 +82,6 @@ export default function BillingPage() {
            setIsLoading(null);
         }
       });
-  };
-
-  // A simple shim for startTransition to avoid adding a new dependency
-  const startTransition = (callback: () => Promise<void>) => {
-    callback();
   };
     
   return (
@@ -109,7 +113,7 @@ export default function BillingPage() {
             <CardFooter>
               <Button 
                 className="w-full" 
-                disabled={plan.isCurrent || !!isLoading}
+                disabled={plan.isCurrent || !!isLoading || isPending}
                 onClick={() => plan.planId && handleUpgradeClick(plan.planId as 'pro' | 'business')}
               >
                 {isLoading === plan.planId ? <Loader2 className="animate-spin" /> : plan.cta}
