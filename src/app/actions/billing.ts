@@ -4,6 +4,9 @@
 import { stripe } from '@/lib/stripe';
 import { auth as adminAuth, firestore } from '@/lib/firebase-admin';
 import { headers } from 'next/headers';
+import { config } from 'dotenv';
+
+config(); // Explicitly load .env variables for this server action
 
 const PRICE_ID_MAP = {
   pro: 'price_1PKw0B2KSlelBWWN8zTv812a',
@@ -18,8 +21,8 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
     } catch (error) {
         console.error("Error verifying ID token:", error);
         // Add a more detailed log for debugging
-        if ((error as any).code === 'auth/argument-error') {
-            console.error("Firebase Admin SDK might not be initialized. Check your environment variables.");
+        if ((error as any).code === 'auth/argument-error' || (error as any).message.includes('Firebase App is not initialized')) {
+            console.error("Firebase Admin SDK is not initialized. Check your environment variables in .env.");
         }
         return { error: 'Authentication failed. Please log in again.' };
     }
