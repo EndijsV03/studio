@@ -24,4 +24,7 @@ export interface UserProfile {
     contactCount: number;
     createdAt: Timestamp;
     stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    stripeSubscriptionStatus?: string;
+    stripePriceId?: string;
 }

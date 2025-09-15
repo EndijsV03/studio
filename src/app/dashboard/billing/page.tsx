@@ -7,12 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
-
-const paymentLinks = {
-  pro: 'https://buy.stripe.com/test_8x23cocXH3Eq1Ej3KadEs01',
-  business: 'https://buy.stripe.com/test_28E14gcXHfn8fv9dkKdEs00',
-};
+import { createCheckoutSession } from '@/app/actions/billing';
 
 const plans = [
   {
@@ -61,32 +56,28 @@ export default function BillingPage() {
   
   const handleUpgradeClick = (planId: 'pro' | 'business') => {
       setIsLoading(planId);
-      try {
-        const user = auth.currentUser;
-        if (!user) {
-            throw new Error('You must be logged in to upgrade.');
+      startTransition(async () => {
+        try {
+          const result = await createCheckoutSession(planId);
+          if (result.url) {
+            window.location.href = result.url;
+          } else {
+            throw new Error(result.error || 'Could not create checkout session.');
+          }
+        } catch (error: any) {
+           toast({
+              variant: 'destructive',
+              title: 'Error',
+              description: error.message || 'Could not initiate checkout. Please try again.',
+           });
+           setIsLoading(null);
         }
-        
-        const paymentLink = paymentLinks[planId];
-        // Construct the URL with the client_reference_id to identify the user
-        const url = new URL(paymentLink);
-        url.searchParams.append('client_reference_id', user.uid);
-        // Prefill the user's email for a smoother checkout experience
-        if (user.email) {
-            url.searchParams.append('prefilled_email', user.email);
-        }
+      });
+  };
 
-        // Redirect the user to the Stripe Checkout page
-        window.location.href = url.toString();
-
-      } catch (error: any) {
-         toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: error.message || 'Could not initiate checkout. Please try again.',
-         });
-         setIsLoading(null);
-      }
+  // A simple shim for startTransition to avoid adding a new dependency
+  const startTransition = (callback: () => Promise<void>) => {
+    callback();
   };
     
   return (
