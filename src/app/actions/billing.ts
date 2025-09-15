@@ -17,6 +17,10 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
         decodedToken = await adminAuth.verifyIdToken(idToken);
     } catch (error) {
         console.error("Error verifying ID token:", error);
+        // Add a more detailed log for debugging
+        if ((error as any).code === 'auth/argument-error') {
+            console.error("Firebase Admin SDK might not be initialized. Check your environment variables.");
+        }
         return { error: 'Authentication failed. Please log in again.' };
     }
     
@@ -73,6 +77,11 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
 
   } catch (error: any) {
     console.error('Error creating checkout session:', error);
+    // Add a check for uninitialized Firestore
+    if (error.message.includes('firestore is not a function')) {
+         console.error("Firebase Admin SDK might not be initialized. Check your environment variables.");
+         return { error: 'Server configuration error. Please contact support.' };
+    }
     return { error: 'An unexpected error occurred. Please try again.' };
   }
 }
