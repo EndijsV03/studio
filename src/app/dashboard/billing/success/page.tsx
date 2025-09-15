@@ -96,7 +96,7 @@ function SuccessContent() {
 export default function SuccessPage() {
   return (
     <div className="flex items-center justify-center h-full">
-       <Suspense fallback={<div>Loading...</div>}>
+       <Suspense fallback={<div className="flex justify-center items-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
          <SuccessContent />
        </Suspense>
     </div>

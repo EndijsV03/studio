@@ -6,9 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
-import { createCheckoutSession } from '@/app/actions/stripe';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
+
+const paymentLinks = {
+  pro: 'https://buy.stripe.com/test_8x23cocXH3Eq1Ej3KadEs01',
+  business: 'https://buy.stripe.com/test_28E14gcXHfn8fv9dkKdEs00',
+};
 
 const plans = [
   {
@@ -63,15 +67,15 @@ export default function BillingPage() {
             throw new Error('You must be logged in to upgrade.');
         }
         
-        const { url, error } = await createCheckoutSession({ plan: planId, userId: user.uid });
-
-        if (error) {
-            throw new Error(error);
+        const paymentLink = paymentLinks[planId];
+        // Construct the URL with parameters
+        const url = new URL(paymentLink);
+        url.searchParams.append('client_reference_id', user.uid);
+        if (user.email) {
+            url.searchParams.append('prefilled_email', user.email);
         }
 
-        if (url) {
-            window.location.href = url;
-        }
+        window.location.href = url.toString();
 
       } catch (error: any) {
          toast({
@@ -79,8 +83,7 @@ export default function BillingPage() {
             title: 'Error',
             description: error.message || 'Could not initiate checkout. Please try again.',
          });
-      } finally {
-        setIsLoading(null);
+         setIsLoading(null);
       }
   };
     
