@@ -2,39 +2,34 @@
 'use server';
 
 import { stripe } from '@/lib/stripe';
-import { auth as adminAuth, firestore } from '@/lib/firebase-admin';
-import { headers } from 'next/headers';
-import { config } from 'dotenv';
-
-config(); // Explicitly load .env variables for this server action
+import { auth, firestore } from '@/lib/firebase-admin';
+import { headers, cookies } from 'next/headers';
 
 const PRICE_ID_MAP = {
   pro: 'price_1PKw0B2KSlelBWWN8zTv812a',
   business: 'price_1PKw1b2KSlelBWWNACTEtD3L',
 };
 
-export async function createCheckoutSession(planId: 'pro' | 'business', idToken: string) {
+async function getCurrentUser() {
+  const sessionCookie = cookies().get('session')?.value;
+  if (!sessionCookie) {
+    return null;
+  }
   try {
-    let decodedToken;
-    try {
-        decodedToken = await adminAuth.verifyIdToken(idToken);
-    } catch (error) {
-        console.error("Error verifying ID token:", error);
-        // Add a more detailed log for debugging
-        if ((error as any).code === 'auth/argument-error' || (error as any).message.includes('Firebase App is not initialized')) {
-            console.error("Firebase Admin SDK is not initialized. Check your environment variables in .env.");
-        }
-        return { error: 'Authentication failed. Please log in again.' };
-    }
-    
-    const user = {
-        uid: decodedToken.uid,
-        email: decodedToken.email,
-        displayName: decodedToken.name,
-    };
+    const decodedToken = await auth.verifySessionCookie(sessionCookie, true);
+    return decodedToken;
+  } catch (error) {
+    console.error('Error verifying session cookie:', error);
+    return null;
+  }
+}
+
+export async function createCheckoutSession(planId: 'pro' | 'business') {
+  try {
+    const user = await getCurrentUser();
 
     if (!user) {
-      return { error: 'You must be logged in to subscribe.' };
+      return { error: 'Authentication failed. Please log in again.' };
     }
 
     const priceId = PRICE_ID_MAP[planId];
@@ -51,7 +46,7 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
     if (!stripeCustomerId) {
         const customer = await stripe.customers.create({
             email: user.email!,
-            name: user.displayName || undefined,
+            name: user.name || undefined,
             metadata: {
                 firebaseUID: user.uid,
             },
@@ -69,7 +64,7 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
         }],
         mode: 'subscription',
         success_url: `${origin}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${origin}/dashboard/billing`,
+        cancel_url: `${origin}/dashboard/billing/cancel`,
         metadata: {
             userId: user.uid,
             planId,
@@ -80,11 +75,6 @@ export async function createCheckoutSession(planId: 'pro' | 'business', idToken:
 
   } catch (error: any) {
     console.error('Error creating checkout session:', error);
-    // Add a check for uninitialized Firestore
-    if (error.message.includes('firestore is not a function')) {
-         console.error("Firebase Admin SDK might not be initialized. Check your environment variables.");
-         return { error: 'Server configuration error. Please contact support.' };
-    }
     return { error: 'An unexpected error occurred. Please try again.' };
   }
 }

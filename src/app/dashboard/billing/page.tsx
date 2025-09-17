@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 import { useState, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { createCheckoutSession } from '@/app/actions/billing';
-import { auth } from '@/lib/firebase';
 
 const plans = [
   {
@@ -60,13 +59,7 @@ export default function BillingPage() {
       setIsLoading(planId);
       startTransition(async () => {
         try {
-          const user = auth.currentUser;
-          if (!user) {
-            throw new Error('You must be logged in to subscribe.');
-          }
-          
-          const idToken = await user.getIdToken();
-          const result = await createCheckoutSession(planId, idToken);
+          const result = await createCheckoutSession(planId);
 
           if (result.url) {
             window.location.href = result.url;

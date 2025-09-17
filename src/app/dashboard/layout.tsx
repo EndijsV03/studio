@@ -11,6 +11,25 @@ import { useToast } from '@/hooks/use-toast';
 import { Home, LogOut, Loader2, DollarSign } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+async function createSession(idToken: string): Promise<boolean> {
+    const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idToken }),
+    });
+    return res.ok;
+}
+
+async function clearSession(): Promise<boolean> {
+    const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+    });
+    return res.ok;
+}
+
+
 export default function DashboardLayout({
   children,
 }: {
@@ -23,21 +42,40 @@ export default function DashboardLayout({
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
+        try {
+          const idToken = await user.getIdToken(true);
+          const sessionCreated = await createSession(idToken);
+          if (!sessionCreated) {
+             throw new Error('Could not create server session.');
+          }
+        } catch(error) {
+           console.error("Session creation failed:", error);
+           // If session creation fails, sign out the user to prevent an inconsistent state
+           await handleSignOut();
+           toast({
+              variant: 'destructive',
+              title: 'Authentication Error',
+              description: 'Could not create a secure session. Please try logging in again.',
+           });
+        }
       } else {
+        setCurrentUser(null);
+        await clearSession();
         router.push('/login');
       }
       setIsAuthLoading(false);
     });
     return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      router.push('/login');
+      // The onAuthStateChanged listener will handle session clearing and redirect
     } catch (error) {
       toast({
         variant: 'destructive',

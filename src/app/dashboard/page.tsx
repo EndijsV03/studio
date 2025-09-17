@@ -5,8 +5,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, runTransaction, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -15,11 +15,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ContactCard } from '@/components/contact-card';
 import { ContactForm } from '@/components/contact-form';
-import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 import { extractContactInfoAction } from '@/app/actions';
 import type { Contact, UserProfile } from '@/types';
-import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown, LogOut, Crown } from 'lucide-react';
+import { UploadCloud, Search, Download, Loader2, Camera, X, ChevronDown, Crown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,8 +34,6 @@ import * as XLSX from 'xlsx';
 import Link from 'next/link';
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
-
-// A type to hold both contact data and the associated file for new contacts
 type EditingContactPayload = (Partial<Contact> | Contact) & { imageFile?: File | null; audioBlob?: Blob };
 
 const PLAN_LIMITS = {
@@ -74,7 +71,6 @@ export default function DashboardPage() {
     const userDoc = await runTransaction(db, async (transaction) => {
         const docSnapshot = await transaction.get(userDocRef);
         if (!docSnapshot.exists()) {
-            // Create the profile if it doesn't exist
             const newProfile: UserProfile = {
                 id: user.uid,
                 email: user.email || '',
@@ -105,13 +101,11 @@ export default function DashboardPage() {
   
   const fetchContacts = useCallback(async () => {
     if (!currentUser) return;
-    // Don't set fetching to true if it's a refresh
     if (contacts.length === 0) {
       setIsFetching(true);
     }
     try {
       const contactsCollection = collection(db, 'contacts');
-      // Query for contacts belonging to the current user
       const q = query(
         contactsCollection, 
         where('userId', '==', currentUser.uid), 
@@ -121,7 +115,6 @@ export default function DashboardPage() {
       const contactsList = contactsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contact));
       setContacts(contactsList);
 
-      // Also update the user profile's contact count if it's out of sync
       if (userProfile && contactsList.length !== userProfile.contactCount) {
         const userDocRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userDocRef, { contactCount: contactsList.length });
@@ -129,22 +122,11 @@ export default function DashboardPage() {
       }
     } catch (error: any) {
       console.error("Error fetching contacts:", error);
-      // Firestore will suggest creating an index if one doesn't exist.
-      if (error.code === 'failed-precondition') {
-          toast({
-            variant: "destructive",
-            title: "Database Index Required",
-            description: "Please create the required Firestore index to query contacts. Check the console for a link.",
-          });
-          // Log the full error which contains the link to create the index
-          console.error(error);
-      } else {
-         toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not fetch contacts from the database.",
-        });
-      }
+       toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not fetch contacts from the database.",
+      });
     }
     setIsFetching(false);
   }, [toast, contacts.length, currentUser, userProfile]);
@@ -173,8 +155,16 @@ export default function DashboardPage() {
     if (isAtLimit) {
         toast({
             variant: 'destructive',
-            title: 'Free Plan Limit Reached',
-            description: 'You have reached the 10 contact limit for the free plan. Please upgrade to add more.',
+            title: 'Plan Limit Reached',
+            description: (
+              <span>
+                You have reached your contact limit. Please{' '}
+                <Link href="/dashboard/billing" className="underline font-bold">
+                  upgrade your plan
+                </Link>{' '}
+                to add more.
+              </span>
+            ),
         });
         return;
     }
@@ -191,8 +181,8 @@ export default function DashboardPage() {
     } else {
       setEditingContact({
         ...result.contactInfo,
-        imageUrl: dataUrl, // This is the previewUrl
-        imageFile: imageFile, // Associate the file with the contact data
+        imageUrl: dataUrl,
+        imageFile: imageFile,
       });
       setIsFormOpen(true);
     }
@@ -201,11 +191,7 @@ export default function DashboardPage() {
   const uploadImageAndGetURL = async (file: File, contactId: string): Promise<string> => {
     if (!currentUser) throw new Error("User not authenticated for image upload.");
     const storageRef = ref(storage, `contact-images/${currentUser.uid}/${contactId}.webp`);
-    
-    // Convert to a webp blob for efficiency
-    const blob = new Blob([file], { type: 'image/webp' });
-
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, file, { contentType: 'image/webp' });
     return getDownloadURL(storageRef);
   };
   
@@ -228,7 +214,6 @@ export default function DashboardPage() {
       const userDocRef = doc(db, 'users', currentUser.uid);
 
       if ('id' in restOfContactData && restOfContactData.id) {
-        // --- UPDATE EXISTING CONTACT ---
         const contactDoc = doc(db, 'contacts', restOfContactData.id);
         const { id, ...updateData } = restOfContactData;
         
@@ -240,41 +225,31 @@ export default function DashboardPage() {
         await updateDoc(contactDoc, {...updateData, voiceNoteUrl});
 
       } else {
-        // --- ADD NEW CONTACT ---
-        if (isAtLimit) {
-          throw new Error('Limit reached');
-        }
+        if (isAtLimit) throw new Error('Limit reached');
         
         const newContactRef = doc(collection(db, 'contacts'));
         let finalImageUrl = '';
-        let finalVoiceNoteUrl = '';
-
-        // Perform uploads BEFORE the transaction
-        // if (contactImageFile) {
-        //    finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
-        // }
+        if (contactImageFile) {
+           finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
+        }
         
+        let finalVoiceNoteUrl = '';
         if (audioBlob) {
           finalVoiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, newContactRef.id);
         }
         
-        // Prepare a clean data object for Firestore, removing the temporary UI-only imageUrl
         const { imageUrl, ...contactDataForDb } = restOfContactData;
 
         await runTransaction(db, async (transaction) => {
           const userDoc = await transaction.get(userDocRef);
-          if (!userDoc.exists()) {
-            throw "User profile does not exist!";
-          }
+          if (!userDoc.exists()) throw "User profile does not exist!";
+          
           const currentCount = userDoc.data().contactCount || 0;
           const limit = PLAN_LIMITS[userDoc.data().subscriptionPlan || 'free'];
-          if (currentCount >= limit) {
-            throw new Error('Limit reached');
-          }
+          if (currentCount >= limit) throw new Error('Limit reached');
 
           transaction.set(newContactRef, {
             ...contactDataForDb,
-            id: newContactRef.id,
             userId: currentUser.uid,
             imageUrl: finalImageUrl,
             voiceNoteUrl: finalVoiceNoteUrl,
@@ -324,24 +299,21 @@ export default function DashboardPage() {
 
         await runTransaction(db, async (transaction) => {
             const userDoc = await transaction.get(userDocRef);
-            if (!userDoc.exists()) {
-                throw "User profile does not exist!";
-            }
+            if (!userDoc.exists()) throw "User profile does not exist!";
+            
             const currentCount = userDoc.data().contactCount || 0;
             
             transaction.delete(contactDocRef);
             transaction.update(userDocRef, { contactCount: Math.max(0, currentCount - 1) });
         });
 
-      if (imageUrl && currentUser) {
-        if (imageUrl.startsWith('gs://') || imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
-            const imageRef = ref(storage, imageUrl);
-            await deleteObject(imageRef).catch(err => {
-                if (err.code !== 'storage/object-not-found') {
-                    console.error("Could not delete image from storage:", err);
-                }
-            });
-        }
+      if (imageUrl && imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
+        const imageRef = ref(storage, imageUrl);
+        await deleteObject(imageRef).catch(err => {
+            if (err.code !== 'storage/object-not-found') {
+                console.error("Could not delete image from storage:", err);
+            }
+        });
       }
       toast({ title: "Contact Deleted", description: "Successfully deleted the contact." });
       await fetchContacts();
@@ -419,12 +391,8 @@ export default function DashboardPage() {
   const clearPreview = () => {
     setPreviewUrl(null);
     setImageFile(null);
-    if(fileInputRef.current) {
-        fileInputRef.current.value = '';
-    }
-    if (cameraInputRef.current) {
-        cameraInputRef.current.value = '';
-    }
+    if(fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   }
 
   if (isAuthLoading || !userProfile) {
@@ -437,127 +405,123 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div className="flex flex-col min-h-screen">
-        <main className="flex-1 container mx-auto p-4 sm:p-6 lg:p-8">
-          <div className="grid gap-8 lg:grid-cols-12">
-            <div className="lg:col-span-4">
-              <Card className="sticky top-24">
-                <CardHeader>
-                  <CardTitle>Capture Card</CardTitle>
-                  <CardDescription>Upload or take a photo of a business card.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {isAtLimit && (
-                    <Alert variant="destructive">
-                      <Crown className="h-4 w-4" />
-                      <AlertTitle>Free Plan Limit Reached</AlertTitle>
-                      <AlertDescription>
-                        You've reached your limit of 10 contacts.
-                        <Button asChild variant="link" className="p-0 ml-1 h-auto">
-                           <Link href="/dashboard/billing">Upgrade your plan</Link>
-                        </Button>
-                         to add more.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  <div className="space-y-2">
-                    <Label>Business Card Photo</Label>
-                     <div className="relative w-full h-48 border-2 border-dashed rounded-lg">
-                      {previewUrl ? (
-                        <>
-                          <Image src={previewUrl} alt="Business card preview" layout="fill" objectFit="contain" className="rounded-lg" />
-                           <Button
-                            variant="destructive"
-                            size="icon"
-                            className="absolute top-2 right-2 h-7 w-7"
-                            onClick={clearPreview}
-                          >
-                            <X className="h-4 w-4" />
-                            <span className="sr-only">Clear image</span>
-                          </Button>
-                        </>
-                      ) : (
-                         <div className="flex flex-col justify-center items-center h-full text-center text-muted-foreground p-4">
-                           <UploadCloud className="mx-auto h-10 w-10 mb-2" />
-                           <p>Drag & drop or click to upload</p>
-                         </div>
-                      )}
-                       <Input id="card-upload" ref={fileInputRef} type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} disabled={isAtLimit} />
-                    </div>
-                  </div>
-                   <div className="flex gap-2">
-                      <Button asChild variant="outline" className="w-full" disabled={isAtLimit}>
-                          <Label htmlFor="camera-upload" className={isAtLimit ? 'cursor-not-allowed' : ''}>
-                            <Camera className="mr-2 h-4 w-4" />
-                            Take Photo
-                          </Label>
+      <div className="grid gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-4">
+          <Card className="sticky top-24">
+            <CardHeader>
+              <CardTitle>Capture Card</CardTitle>
+              <CardDescription>Upload or take a photo of a business card.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isAtLimit && (
+                <Alert variant="destructive">
+                  <Crown className="h-4 w-4" />
+                  <AlertTitle>Plan Limit Reached</AlertTitle>
+                  <AlertDescription>
+                    You've reached your contact limit.
+                    <Button asChild variant="link" className="p-0 ml-1 h-auto">
+                       <Link href="/dashboard/billing">Upgrade your plan</Link>
+                    </Button>
+                     to add more.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label>Business Card Photo</Label>
+                 <div className="relative w-full h-48 border-2 border-dashed rounded-lg flex justify-center items-center">
+                  {previewUrl ? (
+                    <>
+                      <Image src={previewUrl} alt="Business card preview" layout="fill" objectFit="contain" className="rounded-lg" />
+                       <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7"
+                        onClick={clearPreview}
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Clear image</span>
                       </Button>
-                      <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} disabled={isAtLimit} />
-                    </div>
-                  <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving' || isAtLimit} className="w-full">
-                    {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
-                    {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="lg:col-span-8">
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-                   <div>
-                      <h2 className="text-2xl font-bold tracking-tight">My Contacts ({userProfile.contactCount} / {PLAN_LIMITS[userProfile.subscriptionPlan]})</h2>
-                      <p className="text-sm text-muted-foreground capitalize">{userProfile.subscriptionPlan} Plan</p>
-                   </div>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search contacts..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" disabled={contacts.length === 0}>
-                          <Download className="mr-2 h-4 w-4" />
-                          Export
-                          <ChevronDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onClick={handleExportCsv}>
-                          Export as CSV
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleExportXlsx}>
-                          Export as XLSX
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                    </>
+                  ) : (
+                     <div className="text-center text-muted-foreground p-4">
+                       <UploadCloud className="mx-auto h-10 w-10 mb-2" />
+                       <p>Drag & drop or click to upload</p>
+                     </div>
+                  )}
+                   <Input id="card-upload" ref={fileInputRef} type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileChange} disabled={isAtLimit} />
                 </div>
-                {isFetching ? (
-                  <div className="flex justify-center items-center py-16">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  </div>
-                ) : filteredContacts.length > 0 ? (
-                   <div className="grid gap-6 md:grid-cols-2">
-                    {filteredContacts.map(contact => (
-                      <ContactCard 
-                        key={contact.id} 
-                        contact={contact} 
-                        onEdit={handleEditContact}
-                        onDelete={handleDeleteContact}
-                        onUpdateVoiceNote={handleUpdateVoiceNote}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">No contacts found.</p>
-                    <p className="text-sm text-muted-foreground">Upload or take a photo of a business card to get started.</p>
-                  </div>
-                )}
+              </div>
+               <div className="flex gap-2">
+                  <Button asChild variant="outline" className="w-full" disabled={isAtLimit}>
+                      <Label htmlFor="camera-upload" className={`flex items-center justify-center ${isAtLimit ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <Camera className="mr-2 h-4 w-4" />
+                        Take Photo
+                      </Label>
+                  </Button>
+                  <Input id="camera-upload" ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} disabled={isAtLimit} />
+                </div>
+              <Button onClick={() => handleExtract(previewUrl)} disabled={!previewUrl || saveStatus === 'saving' || isAtLimit} className="w-full">
+                {saveStatus === 'saving' && !isFormOpen ? <Loader2 className="animate-spin mr-2" /> : null}
+                {saveStatus === 'saving' && !isFormOpen ? 'Extracting...' : 'Extract Information'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="lg:col-span-8">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+               <div>
+                  <h2 className="text-2xl font-bold tracking-tight">My Contacts ({userProfile.contactCount} / {PLAN_LIMITS[userProfile.subscriptionPlan]})</h2>
+                  <p className="text-sm text-muted-foreground capitalize">{userProfile.subscriptionPlan} Plan</p>
+               </div>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search contacts..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" disabled={contacts.length === 0}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={handleExportCsv}>
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportXlsx}>
+                      Export as XLSX
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
+            {isFetching ? (
+              <div className="flex justify-center items-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : filteredContacts.length > 0 ? (
+               <div className="grid gap-6 md:grid-cols-2">
+                {filteredContacts.map(contact => (
+                  <ContactCard 
+                    key={contact.id} 
+                    contact={contact} 
+                    onEdit={handleEditContact}
+                    onDelete={handleDeleteContact}
+                    onUpdateVoiceNote={handleUpdateVoiceNote}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16 border-2 border-dashed rounded-lg">
+                <p className="text-muted-foreground">No contacts found.</p>
+                <p className="text-sm text-muted-foreground">Upload or take a photo of a business card to get started.</p>
+              </div>
+            )}
           </div>
-        </main>
+        </div>
       </div>
       <ContactForm 
         isOpen={isFormOpen} 
@@ -570,5 +534,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
