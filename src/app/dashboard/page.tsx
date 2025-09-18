@@ -214,24 +214,26 @@ export default function DashboardPage() {
       const userDocRef = doc(db, 'users', currentUser.uid);
 
       if ('id' in restOfContactData && restOfContactData.id) {
+        // UPDATE EXISTING CONTACT
         const contactDoc = doc(db, 'contacts', restOfContactData.id);
-        const { id, ...updateData } = restOfContactData;
+        const { id, imageUrl, ...updateData } = restOfContactData; // Exclude imageUrl from update
         
-        let voiceNoteUrl = updateData.voiceNoteUrl;
+        let voiceNoteUrl = (updateData as Contact).voiceNoteUrl;
         if(audioBlob) {
             voiceNoteUrl = await uploadVoiceNoteAndGetURL(audioBlob, id);
         }
-
+        
+        // Don't update the image for now
         await updateDoc(contactDoc, {...updateData, voiceNoteUrl});
 
       } else {
+        // CREATE NEW CONTACT
         if (isAtLimit) throw new Error('Limit reached');
         
         const newContactRef = doc(collection(db, 'contacts'));
-        let finalImageUrl = '';
-        if (contactImageFile) {
-           finalImageUrl = await uploadImageAndGetURL(contactImageFile, newContactRef.id);
-        }
+        
+        // Skip image upload for now
+        let finalImageUrl = ''; 
         
         let finalVoiceNoteUrl = '';
         if (audioBlob) {
@@ -251,7 +253,7 @@ export default function DashboardPage() {
           transaction.set(newContactRef, {
             ...contactDataForDb,
             userId: currentUser.uid,
-            imageUrl: finalImageUrl,
+            imageUrl: finalImageUrl, // Save empty string for image URL
             voiceNoteUrl: finalVoiceNoteUrl,
             createdAt: serverTimestamp(),
           });
