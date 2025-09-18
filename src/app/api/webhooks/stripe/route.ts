@@ -15,8 +15,8 @@ const relevantEvents = new Set([
 
 // TODO: Replace with your actual Stripe Price IDs
 const PRICE_ID_TO_PLAN_MAP: Record<string, SubscriptionPlan> = {
-  'price_1PKw0B2KSlelBWWN8zTv812a': 'pro', // Replace with your Pro Plan Price ID
-  'price_1PKw1b2KSlelBWWNACTEtD3L': 'business', // Replace with your Business Plan Price ID
+  'price_1S6djo2KSlelBWWNnPLltBAX': 'pro', // Replace with your Pro Plan Price ID
+  'price_1S6dkf2KSlelBWWNeD4KalIb': 'business', // Replace with your Business Plan Price ID
 };
 
 async function updateSubscription(subscription: Stripe.Subscription) {
@@ -25,6 +25,7 @@ async function updateSubscription(subscription: Stripe.Subscription) {
 
     if (!plan) {
         console.error(`Webhook Error: Unrecognized price ID: ${priceId}`);
+        // Still return 200 to Stripe to avoid retries for a configuration error on our end.
         return;
     }
 
@@ -94,6 +95,10 @@ export async function POST(req: NextRequest) {
           const checkoutSession = event.data.object as Stripe.Checkout.Session;
           if (checkoutSession.mode === 'subscription') {
             const subscriptionId = checkoutSession.subscription;
+            if (!subscriptionId) {
+                console.error('Webhook Error: checkout.session.completed event without a subscription ID.');
+                break;
+            }
             const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
             await updateSubscription(subscription);
           }
@@ -110,7 +115,7 @@ export async function POST(req: NextRequest) {
            break;
 
         default:
-          throw new Error(`Unhandled relevant event type: ${event.type}`);
+          console.log(`Unhandled relevant event type: ${event.type}`);
       }
     } catch (error) {
       console.error('Error handling webhook event:', error);
