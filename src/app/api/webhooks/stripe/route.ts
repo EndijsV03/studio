@@ -13,9 +13,10 @@ const relevantEvents = new Set([
   'customer.subscription.deleted',
 ]);
 
+// TODO: Replace with your actual Stripe Price IDs
 const PRICE_ID_TO_PLAN_MAP: Record<string, SubscriptionPlan> = {
-  'price_1PKw0B2KSlelBWWN8zTv812a': 'pro',
-  'price_1PKw1b2KSlelBWWNACTEtD3L': 'business',
+  'price_1PKw0B2KSlelBWWN8zTv812a': 'pro', // Replace with your Pro Plan Price ID
+  'price_1PKw1b2KSlelBWWNACTEtD3L': 'business', // Replace with your Business Plan Price ID
 };
 
 async function updateSubscription(subscription: Stripe.Subscription) {

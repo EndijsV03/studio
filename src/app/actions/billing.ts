@@ -5,9 +5,10 @@ import { stripe } from '@/lib/stripe';
 import { auth, firestore } from '@/lib/firebase-admin';
 import { headers, cookies } from 'next/headers';
 
+// TODO: Replace with your actual Stripe Price IDs
 const PRICE_ID_MAP = {
-  pro: 'price_1PKw0B2KSlelBWWN8zTv812a',
-  business: 'price_1PKw1b2KSlelBWWNACTEtD3L',
+  pro: 'price_1PKw0B2KSlelBWWN8zTv812a', // Replace with your Pro Plan Price ID
+  business: 'price_1PKw1b2KSlelBWWNACTEtD3L', // Replace with your Business Plan Price ID
 };
 
 async function getCurrentUser() {
