@@ -9,10 +9,6 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    // This allows requests from your development environment to the Next.js server.
-    allowedDevOrigins: ["https://6000-firebase-studio-1756581123887.cluster-gjstlrnqpna56vr4xhdezmmq4e.cloudworkstations.dev"],
-  },
   async headers() {
     return [
       {
